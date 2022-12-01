@@ -28,8 +28,8 @@ func init() {
 func main() {
 	// define cli options
 	app := &cli.App{
-		Name:     "librespeed-cli",
-		Usage:    "Test your Internet speed with LibreSpeed",
+		Name:     "Taierspeed-cli",
+		Usage:    "Test your Internet speed with TaierSpeed",
 		Action:   speedtest.SpeedTest,
 		HideHelp: true,
 		Flags: []cli.Flag{
@@ -37,16 +37,6 @@ func main() {
 			&cli.BoolFlag{
 				Name:  defs.OptionVersion,
 				Usage: "Show the version number and exit",
-			},
-			&cli.BoolFlag{
-				Name:    defs.OptionIPv4,
-				Aliases: []string{defs.OptionIPv4Alt},
-				Usage:   "Force IPv4 only",
-			},
-			&cli.BoolFlag{
-				Name:    defs.OptionIPv6,
-				Aliases: []string{defs.OptionIPv6Alt},
-				Usage:   "Force IPv6 only",
 			},
 			&cli.BoolFlag{
 				Name:  defs.OptionNoDownload,
@@ -76,17 +66,6 @@ func main() {
 				Name:  defs.OptionMebiBytes,
 				Usage: "Use 1024 bytes as 1 kilobyte instead of 1000",
 			},
-			&cli.StringFlag{
-				Name: defs.OptionDistance,
-				Usage: "Change distance unit shown in ISP info, use 'mi' for miles,\n" +
-					"\t'km' for kilometres, 'NM' for nautical miles",
-				Value: "km",
-			},
-			&cli.BoolFlag{
-				Name: defs.OptionShare,
-				Usage: "Generate and provide a URL to the LibreSpeed.org share results\n" +
-					"\timage, not displayed with --csv",
-			},
 			&cli.BoolFlag{
 				Name:  defs.OptionSimple,
 				Usage: "Suppress verbose output, only show basic information\n\t",
@@ -114,26 +93,12 @@ func main() {
 			},
 			&cli.BoolFlag{
 				Name:  defs.OptionList,
-				Usage: "Display a list of LibreSpeed.org servers",
+				Usage: "Display a list of TaierSpeed servers",
 			},
-			&cli.IntSliceFlag{
+			&cli.StringSliceFlag{
 				Name: defs.OptionServer,
 				Usage: "Specify a `SERVER` ID to test against. Can be supplied\n" +
-					"\tmultiple times. Cannot be used with --exclude",
-			},
-			&cli.IntSliceFlag{
-				Name: defs.OptionExclude,
-				Usage: "`EXCLUDE` a server from selection. Can be supplied\n" +
-					"\tmultiple times. Cannot be used with --server",
-			},
-			&cli.StringFlag{
-				Name:  defs.OptionServerJSON,
-				Usage: "Use an alternative server list from remote JSON file",
-			},
-			&cli.StringFlag{
-				Name: defs.OptionLocalJSON,
-				Usage: "Use an alternative server list from local JSON file,\n" +
-					"\tor read from stdin with \"--" + defs.OptionLocalJSON + " -\".",
+					"\tmultiple times.",
 			},
 			&cli.StringFlag{
 				Name:  defs.OptionSource,
@@ -160,15 +125,6 @@ func main() {
 				Value: 1024,
 			},
 			&cli.BoolFlag{
-				Name: defs.OptionSecure,
-				Usage: "Use HTTPS instead of HTTP when communicating with\n" +
-					"\tLibreSpeed.org operated servers",
-			},
-			&cli.BoolFlag{
-				Name:  defs.OptionSkipCertVerify,
-				Usage: "Skip verifying SSL certificate for HTTPS connections (self-signed certs)",
-			},
-			&cli.BoolFlag{
 				Name: defs.OptionNoPreAllocate,
 				Usage: "Do not pre allocate upload data. Pre allocation is\n" +
 					"\tenabled by default to improve upload performance. To\n" +
@@ -180,34 +136,6 @@ func main() {
 				Aliases: []string{"verbose"},
 				Usage:   "Debug mode (verbose logging)",
 				Hidden:  true,
-			},
-			&cli.StringFlag{
-				Name: defs.OptionTelemetryJSON,
-				Usage: "Load telemetry server settings from a JSON file. This\n" +
-					"\toptions overrides --" + defs.OptionTelemetryLevel + ", --" + defs.OptionTelemetryServer + ",\n" +
-					"\t--" + defs.OptionTelemetryPath + ", and --" + defs.OptionTelemetryShare + ". Implies --" + defs.OptionShare,
-			},
-			&cli.StringFlag{
-				Name: defs.OptionTelemetryLevel,
-				Usage: "Set telemetry data verbosity, available values are:\n" +
-					"\tdisabled, basic, full, debug. Implies --" + defs.OptionShare,
-			},
-			&cli.StringFlag{
-				Name:  defs.OptionTelemetryServer,
-				Usage: "Set the telemetry server base URL. Implies --" + defs.OptionShare,
-			},
-			&cli.StringFlag{
-				Name:  defs.OptionTelemetryPath,
-				Usage: "Set the telemetry upload path. Implies --" + defs.OptionShare,
-			},
-			&cli.StringFlag{
-				Name:  defs.OptionTelemetryShare,
-				Usage: "Set the telemetry share link path. Implies --" + defs.OptionShare,
-			},
-			&cli.StringFlag{
-				Name: defs.OptionTelemetryExtra,
-				Usage: "Send a custom message along with the telemetry results.\n" +
-					"\tImplies --" + defs.OptionShare,
 			},
 		},
 	}

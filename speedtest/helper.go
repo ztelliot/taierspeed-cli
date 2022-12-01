@@ -2,15 +2,15 @@ package speedtest
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/briandowns/spinner"
@@ -27,8 +27,75 @@ const (
 	pingCount = 10
 )
 
+func enQueue(s defs.Server) string {
+	time.Local, _ = time.LoadLocation("Asia/Chongqing")
+	ts := strconv.Itoa(int(time.Now().Local().Unix()))
+
+	md5Ctx := md5.New()
+	md5Ctx.Write([]byte("model=Android&imei=" + defs.IMEI + "&stime=" + ts))
+	token := hex.EncodeToString(md5Ctx.Sum(nil))
+
+	url := fmt.Sprintf("http://%s:%s/speed/dovalid?key=&flag=true&bandwidth=200&model=Android&imei=%s&time=%s&token=%s", s.IP, s.Port, defs.IMEI, ts, token)
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		log.Debugf("Failed when creating HTTP request: %s", err)
+		return ""
+	}
+	req.Header.Set("User-Agent", defs.UserAgent)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Debugf("Failed when making HTTP request: %s", err)
+		return ""
+	}
+	defer resp.Body.Close()
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Debugf("Failed when reading HTTP response: %s", err)
+		return ""
+	}
+
+	if len(b) <= 0 {
+		return ""
+	}
+
+	return string(b)[2:]
+}
+
+func deQueue(s defs.Server, key string) bool {
+	url := fmt.Sprintf("http://%s:%s/speed/dovalid?key=%s", s.IP, s.Port, key)
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		log.Debugf("Failed when creating HTTP request: %s", err)
+		return false
+	}
+	req.Header.Set("User-Agent", defs.UserAgent)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Debugf("Failed when making HTTP request: %s", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Debugf("Failed when reading HTTP response: %s", err)
+		return false
+	}
+
+	if len(b) <= 0 {
+		return false
+	}
+
+	return true
+}
+
 // doSpeedTest is where the actual speed test happens
-func doSpeedTest(c *cli.Context, servers []defs.Server, telemetryServer defs.TelemetryServer, network string, silent bool) error {
+func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *defs.IPInfoResponse) error {
 	if serverCount := len(servers); serverCount > 1 {
 		log.Infof("Testing against %d servers", serverCount)
 	}
@@ -38,29 +105,12 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, telemetryServer defs.Tel
 
 	// fetch current user's IP info
 	for _, currentServer := range servers {
-		// get telemetry level
-		currentServer.TLog.SetLevel(telemetryServer.GetLevel())
 
-		u, err := currentServer.GetURL()
-		if err != nil {
-			log.Errorf("Failed to get server URL: %s", err)
-			return err
-		}
+		log.Infof("Server:\t\t%s [%s]", currentServer.Name, currentServer.IP)
 
-		log.Infof("Selected server: %s [%s]", currentServer.Name, u.Hostname())
+		token := enQueue(currentServer)
 
-		if sponsorMsg := currentServer.Sponsor(); sponsorMsg != "" {
-			log.Infof("Sponsored by: %s", sponsorMsg)
-		}
-
-		if currentServer.IsUp() {
-			ispInfo, err := currentServer.GetIPInfo(c.String(defs.OptionDistance))
-			if err != nil {
-				log.Errorf("Failed to get IP info: %s", err)
-				return err
-			}
-			log.Infof("You're testing from: %s", ispInfo.ProcessedString)
-
+		if len(token) > 0 {
 			// get ping and jitter value
 			var pb *spinner.Spinner
 			if !silent {
@@ -72,14 +122,14 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, telemetryServer defs.Tel
 			// skip ICMP if option given
 			currentServer.NoICMP = c.Bool(defs.OptionNoICMP)
 
-			p, jitter, err := currentServer.ICMPPingAndJitter(pingCount, c.String(defs.OptionSource), network)
+			p, jitter, err := currentServer.ICMPPingAndJitter(pingCount, c.String(defs.OptionSource))
 			if err != nil {
 				log.Errorf("Failed to get ping and jitter: %s", err)
 				return err
 			}
 
 			if pb != nil {
-				pb.FinalMSG = fmt.Sprintf("Ping: %.2f ms\tJitter: %.2f ms\n", p, jitter)
+				pb.FinalMSG = fmt.Sprintf("Latency:\t%.2f ms (%.2f ms jitter)\n", p, jitter)
 				pb.Stop()
 			}
 
@@ -89,7 +139,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, telemetryServer defs.Tel
 			if c.Bool(defs.OptionNoDownload) {
 				log.Info("Download test is disabled")
 			} else {
-				download, br, err := currentServer.Download(silent, c.Bool(defs.OptionBytes), c.Bool(defs.OptionMebiBytes), c.Int(defs.OptionConcurrent), c.Int(defs.OptionChunks), time.Duration(c.Int(defs.OptionDuration))*time.Second)
+				download, br, err := currentServer.Download(silent, c.Bool(defs.OptionBytes), c.Bool(defs.OptionMebiBytes), c.Int(defs.OptionConcurrent), c.Int(defs.OptionChunks), time.Duration(c.Int(defs.OptionDuration))*time.Second, token)
 				if err != nil {
 					log.Errorf("Failed to get download speed: %s", err)
 					return err
@@ -104,7 +154,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, telemetryServer defs.Tel
 			if c.Bool(defs.OptionNoUpload) {
 				log.Info("Upload test is disabled")
 			} else {
-				upload, bw, err := currentServer.Upload(c.Bool(defs.OptionNoPreAllocate), silent, c.Bool(defs.OptionBytes), c.Bool(defs.OptionMebiBytes), c.Int(defs.OptionConcurrent), c.Int(defs.OptionUploadSize), time.Duration(c.Int(defs.OptionDuration))*time.Second)
+				upload, bw, err := currentServer.Upload(c.Bool(defs.OptionNoPreAllocate), silent, c.Bool(defs.OptionBytes), c.Bool(defs.OptionMebiBytes), c.Int(defs.OptionConcurrent), c.Int(defs.OptionUploadSize), time.Duration(c.Int(defs.OptionDuration))*time.Second, token)
 				if err != nil {
 					log.Errorf("Failed to get upload speed: %s", err)
 					return err
@@ -113,31 +163,15 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, telemetryServer defs.Tel
 				bytesWritten = bw
 			}
 
+			deQueue(currentServer, token)
+
 			// print result if --simple is given
 			if c.Bool(defs.OptionSimple) {
 				if c.Bool(defs.OptionBytes) {
 					useMebi := c.Bool(defs.OptionMebiBytes)
-					log.Warnf("Ping:\t%.2f ms\tJitter:\t%.2f ms\nDownload rate:\t%s\nUpload rate:\t%s", p, jitter, humanizeMbps(downloadValue, useMebi), humanizeMbps(uploadValue, useMebi))
+					log.Warnf("Latency:\t\t%.2f ms (%.2f ms jitter)\nDownload:\t%s\nUpload:\t\t%s", p, jitter, humanizeMbps(downloadValue, useMebi), humanizeMbps(uploadValue, useMebi))
 				} else {
-					log.Warnf("Ping:\t%.2f ms\tJitter:\t%.2f ms\nDownload rate:\t%.2f Mbps\nUpload rate:\t%.2f Mbps", p, jitter, downloadValue, uploadValue)
-				}
-			}
-
-			// print share link if --share is given
-			var shareLink string
-			if telemetryServer.GetLevel() > 0 {
-				var extra defs.TelemetryExtra
-				extra.ServerName = currentServer.Name
-				extra.Extra = c.String(defs.OptionTelemetryExtra)
-
-				if link, err := sendTelemetry(telemetryServer, ispInfo, downloadValue, uploadValue, p, jitter, currentServer.TLog.String(), extra); err != nil {
-					log.Errorf("Error when sending telemetry data: %s", err)
-				} else {
-					shareLink = link
-					// only print to stdout when --json and --csv are not used
-					if !c.Bool(defs.OptionJSON) && !c.Bool(defs.OptionCSV) {
-						log.Warnf("Share your result: %s", link)
-					}
+					log.Warnf("Latency:\t\t%.2f ms (%.2f ms jitter)\nDownload:\t%.2f Mbps\nUpload:\t\t%.2f Mbps", p, jitter, downloadValue, uploadValue)
 				}
 			}
 
@@ -148,13 +182,12 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, telemetryServer defs.Tel
 				rep.Timestamp = time.Now()
 
 				rep.Name = currentServer.Name
-				rep.Address = u.String()
+				rep.Address = currentServer.IP
 				rep.Ping = math.Round(p*100) / 100
 				rep.Jitter = math.Round(jitter*100) / 100
 				rep.Download = math.Round(downloadValue*100) / 100
 				rep.Upload = math.Round(uploadValue*100) / 100
-				rep.Share = shareLink
-				rep.IP = ispInfo.RawISPInfo.IP
+				rep.IP = ispInfo.IP
 
 				reps_csv = append(reps_csv, rep)
 			} else if c.Bool(defs.OptionJSON) {
@@ -168,18 +201,16 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, telemetryServer defs.Tel
 				rep.Upload = math.Round(uploadValue*100) / 100
 				rep.BytesReceived = bytesRead
 				rep.BytesSent = bytesWritten
-				rep.Share = shareLink
 
 				rep.Server.Name = currentServer.Name
-				rep.Server.URL = u.String()
+				rep.Server.IP = currentServer.IP
 
-				rep.Client = report.Client{ispInfo.RawISPInfo}
-				rep.Client.Readme = ""
+				rep.Client = *ispInfo
 
 				reps_json = append(reps_json, rep)
 			}
 		} else {
-			log.Infof("Selected server %s (%s) is not responding at the moment, try again later", currentServer.Name, u.Hostname())
+			log.Infof("Selected server %s (%s) is not responding at the moment, try again later", currentServer.Name, currentServer.IP)
 		}
 
 		//add a new line after each test if testing multiple servers
@@ -205,116 +236,6 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, telemetryServer defs.Tel
 	}
 
 	return nil
-}
-
-// sendTelemetry sends the telemetry result to server, if --share is given
-func sendTelemetry(telemetryServer defs.TelemetryServer, ispInfo *defs.GetIPResult, download, upload, pingVal, jitter float64, logs string, extra defs.TelemetryExtra) (string, error) {
-	var buf bytes.Buffer
-	wr := multipart.NewWriter(&buf)
-
-	b, _ := json.Marshal(ispInfo)
-	if fIspInfo, err := wr.CreateFormField("ispinfo"); err != nil {
-		log.Debugf("Error creating form field: %s", err)
-		return "", err
-	} else if _, err = fIspInfo.Write(b); err != nil {
-		log.Debugf("Error writing form field: %s", err)
-		return "", err
-	}
-
-	if fDownload, err := wr.CreateFormField("dl"); err != nil {
-		log.Debugf("Error creating form field: %s", err)
-		return "", err
-	} else if _, err = fDownload.Write([]byte(strconv.FormatFloat(download, 'f', 2, 64))); err != nil {
-		log.Debugf("Error writing form field: %s", err)
-		return "", err
-	}
-
-	if fUpload, err := wr.CreateFormField("ul"); err != nil {
-		log.Debugf("Error creating form field: %s", err)
-		return "", err
-	} else if _, err = fUpload.Write([]byte(strconv.FormatFloat(upload, 'f', 2, 64))); err != nil {
-		log.Debugf("Error writing form field: %s", err)
-		return "", err
-	}
-
-	if fPing, err := wr.CreateFormField("ping"); err != nil {
-		log.Debugf("Error creating form field: %s", err)
-		return "", err
-	} else if _, err = fPing.Write([]byte(strconv.FormatFloat(pingVal, 'f', 2, 64))); err != nil {
-		log.Debugf("Error writing form field: %s", err)
-		return "", err
-	}
-
-	if fJitter, err := wr.CreateFormField("jitter"); err != nil {
-		log.Debugf("Error creating form field: %s", err)
-		return "", err
-	} else if _, err = fJitter.Write([]byte(strconv.FormatFloat(jitter, 'f', 2, 64))); err != nil {
-		log.Debugf("Error writing form field: %s", err)
-		return "", err
-	}
-
-	if fLog, err := wr.CreateFormField("log"); err != nil {
-		log.Debugf("Error creating form field: %s", err)
-		return "", err
-	} else if _, err = fLog.Write([]byte(logs)); err != nil {
-		log.Debugf("Error writing form field: %s", err)
-		return "", err
-	}
-
-	b, _ = json.Marshal(extra)
-	if fExtra, err := wr.CreateFormField("extra"); err != nil {
-		log.Debugf("Error creating form field: %s", err)
-		return "", err
-	} else if _, err = fExtra.Write(b); err != nil {
-		log.Debugf("Error writing form field: %s", err)
-		return "", err
-	}
-
-	if err := wr.Close(); err != nil {
-		log.Debugf("Error flushing form field writer: %s", err)
-		return "", err
-	}
-
-	telemetryUrl, err := telemetryServer.GetPath()
-	if err != nil {
-		return "", err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, telemetryUrl.String(), &buf)
-	if err != nil {
-		log.Debugf("Error when creating HTTP request: %s", err)
-		return "", err
-	}
-	req.Header.Set("Content-Type", wr.FormDataContentType())
-	req.Header.Set("User-Agent", defs.UserAgent)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Debugf("Error when making HTTP request: %s", err)
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	id, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Errorf("Error when reading HTTP request: %s", err)
-		return "", err
-	}
-
-	resultUrl, err := telemetryServer.GetShare()
-	if err != nil {
-		return "", err
-	}
-
-	if str := strings.Split(string(id), " "); len(str) != 2 {
-		return "", fmt.Errorf("server returned invalid response: %s", id)
-	} else {
-		q := resultUrl.Query()
-		q.Set("id", str[1])
-		resultUrl.RawQuery = q.Encode()
-
-		return resultUrl.String(), nil
-	}
 }
 
 func humanizeMbps(mbps float64, useMebi bool) string {

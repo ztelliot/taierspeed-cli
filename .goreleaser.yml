@@ -1,4 +1,4 @@
-project_name: 'librespeed-cli'
+project_name: 'taierspeed-cli'
 #dist: ./out
 before:
   hooks:
@@ -79,6 +79,6 @@ changelog:
   sort: asc
 release:
   github:
-    owner: librespeed
+    owner: taierspeed
     name: speedtest-cli
   disable: false

@@ -13,6 +13,5 @@ type CSVReport struct {
 	Jitter    float64   `csv:"Jitter"`
 	Download  float64   `csv:"Download"`
 	Upload    float64   `csv:"Upload"`
-	Share     string    `csv:"Share"`
 	IP        string    `csv:"IP"`
 }

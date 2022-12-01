@@ -3,15 +3,12 @@ package defs
 import (
 	"context"
 	"crypto/rand"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"math"
 	"net/http"
-	"net/url"
-	"path"
 	"strconv"
 	"time"
 
@@ -22,53 +19,17 @@ import (
 
 // Server represents a speed test server
 type Server struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	Server      string `json:"server"`
-	DownloadURL string `json:"dlURL"`
-	UploadURL   string `json:"ulURL"`
-	PingURL     string `json:"pingURL"`
-	GetIPURL    string `json:"getIpURL"`
-	SponsorName string `json:"sponsorName"`
-	SponsorURL  string `json:"sponsorURL"`
+	ID   string `json:"hostid"`
+	Name string `json:"hostname"`
+	IP   string `json:"hostip"`
+	Port string `json:"port"`
 
 	NoICMP bool         `json:"-"`
 	TLog   TelemetryLog `json:"-"`
 }
 
-// IsUp checks the speed test backend is up by accessing the ping URL
-func (s *Server) IsUp() bool {
-	t := time.Now()
-	defer func() {
-		s.TLog.Logf("Check backend is up took %s", time.Now().Sub(t).String())
-	}()
-
-	u, _ := s.GetURL()
-	u.Path = path.Join(u.Path, s.PingURL)
-
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-	if err != nil {
-		log.Debugf("Failed when creating HTTP request: %s", err)
-		return false
-	}
-	req.Header.Set("User-Agent", UserAgent)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Debugf("Error checking for server status: %s", err)
-		return false
-	}
-	defer resp.Body.Close()
-	b, _ := ioutil.ReadAll(resp.Body)
-	if len(b) > 0 {
-		log.Debugf("Failed when parsing get IP result: %s", b)
-	}
-	// only return online if the ping URL returns nothing and 200
-	return resp.StatusCode == http.StatusOK
-}
-
 // ICMPPingAndJitter pings the server via ICMP echos and calculate the average ping and jitter
-func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, float64, error) {
+func (s *Server) ICMPPingAndJitter(count int, srcIp string) (float64, float64, error) {
 	t := time.Now()
 	defer func() {
 		s.TLog.Logf("ICMP ping took %s", time.Now().Sub(t).String())
@@ -79,14 +40,7 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, f
 		return s.PingAndJitter(count + 2)
 	}
 
-	u, err := s.GetURL()
-	if err != nil {
-		log.Debugf("Failed to get server URL: %s", err)
-		return 0, 0, err
-	}
-
-	p := ping.New(u.Hostname())
-	p.SetNetwork(network)
+	p := ping.New(s.IP)
 	p.Count = count
 	p.Timeout = time.Duration(count) * time.Second
 	if srcIp != "" {
@@ -120,7 +74,7 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, f
 
 	if len(stats.Rtts) == 0 {
 		s.NoICMP = true
-		log.Debugf("No ICMP pings returned for server %s (%s), trying TCP ping", s.Name, u.Hostname())
+		log.Debugf("No ICMP pings returned for server %s (%s), trying TCP ping", s.Name, s.IP)
 		return s.PingAndJitter(count + 2)
 	}
 
@@ -134,16 +88,11 @@ func (s *Server) PingAndJitter(count int) (float64, float64, error) {
 		s.TLog.Logf("TCP ping took %s", time.Now().Sub(t).String())
 	}()
 
-	u, err := s.GetURL()
-	if err != nil {
-		log.Debugf("Failed to get server URL: %s", err)
-		return 0, 0, err
-	}
-	u.Path = path.Join(u.Path, s.PingURL)
+	url := fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
 
 	var pings []float64
 
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
@@ -188,7 +137,7 @@ func (s *Server) PingAndJitter(count int) (float64, float64, error) {
 }
 
 // Download performs the actual download test
-func (s *Server) Download(silent bool, useBytes, useMebi bool, requests int, chunks int, duration time.Duration) (float64, int, error) {
+func (s *Server) Download(silent bool, useBytes, useMebi bool, requests int, chunks int, duration time.Duration, token string) (float64, int, error) {
 	t := time.Now()
 	defer func() {
 		s.TLog.Logf("Download took %s", time.Now().Sub(t).String())
@@ -200,14 +149,9 @@ func (s *Server) Download(silent bool, useBytes, useMebi bool, requests int, chu
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	u, err := s.GetURL()
-	if err != nil {
-		log.Debugf("Failed to get server URL: %s", err)
-		return 0, 0, err
-	}
+	url := fmt.Sprintf("http://%s:%s/speed/File(1G).dl?key=", s.IP, s.Port, token)
 
-	u.Path = path.Join(u.Path, s.DownloadURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
@@ -252,9 +196,9 @@ func (s *Server) Download(silent bool, useBytes, useMebi bool, requests int, chu
 		pb.Start()
 		defer func() {
 			if useBytes {
-				pb.FinalMSG = fmt.Sprintf("Download rate:\t%s\n", counter.AvgHumanize())
+				pb.FinalMSG = fmt.Sprintf("Download:\t%s\n", counter.AvgHumanize())
 			} else {
-				pb.FinalMSG = fmt.Sprintf("Download rate:\t%.2f Mbps\n", counter.AvgMbps())
+				pb.FinalMSG = fmt.Sprintf("Download:\t%.2f Mbps\n", counter.AvgMbps())
 			}
 			pb.Stop()
 		}()
@@ -280,7 +224,7 @@ Loop:
 }
 
 // Upload performs the actual upload test
-func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests int, uploadSize int, duration time.Duration) (float64, int, error) {
+func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests int, uploadSize int, duration time.Duration, token string) (float64, int, error) {
 	t := time.Now()
 	defer func() {
 		s.TLog.Logf("Upload took %s", time.Now().Sub(t).String())
@@ -297,22 +241,16 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests int
 		counter.GenerateBlob()
 	}
 
-	u, err := s.GetURL()
-	if err != nil {
-		log.Debugf("Failed to get server URL: %s", err)
-		return 0, 0, err
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	u.Path = path.Join(u.Path, s.UploadURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), counter)
+	url := fmt.Sprintf("http://%s:%s/speed/doAnalsLoad.do", s.IP, s.Port)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, counter)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
 	}
 	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Accept-Encoding", "identity")
+	req.Header.Set("Key", token)
 
 	uploadDone := make(chan struct{}, requests)
 
@@ -345,9 +283,9 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests int
 		pb.Start()
 		defer func() {
 			if useBytes {
-				pb.FinalMSG = fmt.Sprintf("Upload rate:\t%s\n", counter.AvgHumanize())
+				pb.FinalMSG = fmt.Sprintf("Upload:\t\t%s\n", counter.AvgHumanize())
 			} else {
-				pb.FinalMSG = fmt.Sprintf("Upload rate:\t%.2f Mbps\n", counter.AvgMbps())
+				pb.FinalMSG = fmt.Sprintf("Upload:\t\t%.2f Mbps\n", counter.AvgMbps())
 			}
 			pb.Stop()
 		}()
@@ -370,90 +308,4 @@ Loop:
 	}
 
 	return counter.AvgMbps(), counter.Total(), nil
-}
-
-// GetIPInfo accesses the backend's getIP.php endpoint and get current client's IP information
-func (s *Server) GetIPInfo(distanceUnit string) (*GetIPResult, error) {
-	t := time.Now()
-	defer func() {
-		s.TLog.Logf("Get IP info took %s", time.Now().Sub(t).String())
-	}()
-
-	var ipInfo GetIPResult
-	u, err := s.GetURL()
-	if err != nil {
-		log.Debugf("Failed to get server URL: %s", err)
-		return nil, err
-	}
-	u.Path = path.Join(u.Path, s.GetIPURL)
-	q := u.Query()
-	q.Set("isp", "true")
-	q.Set("distance", distanceUnit)
-	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-	if err != nil {
-		log.Debugf("Failed when creating HTTP request: %s", err)
-		return nil, err
-	}
-	req.Header.Set("User-Agent", UserAgent)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Debugf("Failed when making HTTP request: %s", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Debugf("Failed when reading HTTP response: %s", err)
-		return nil, err
-	}
-
-	if len(b) > 0 {
-		if err := json.Unmarshal(b, &ipInfo); err != nil {
-			log.Debugf("Failed when parsing get IP result: %s", err)
-			log.Debugf("Received payload: %s", b)
-			ipInfo.ProcessedString = string(b[:])
-		}
-	}
-
-	return &ipInfo, nil
-}
-
-// GetURL parses the server's URL into a url.URL
-func (s *Server) GetURL() (*url.URL, error) {
-	t := time.Now()
-	defer func() {
-		s.TLog.Logf("Parse server URL took %s", time.Now().Sub(t).String())
-	}()
-
-	u, err := url.Parse(s.Server)
-	if err != nil {
-		log.Debugf("Failed when parsing server URL: %s", err)
-		return u, err
-	}
-	return u, nil
-}
-
-// Sponsor returns the sponsor's info
-func (s *Server) Sponsor() string {
-	var sponsorMsg string
-	if s.SponsorName != "" {
-		sponsorMsg += s.SponsorName
-
-		if s.SponsorURL != "" {
-			su, err := url.Parse(s.SponsorURL)
-			if err != nil {
-				log.Debugf("Sponsor URL is invalid: %s", s.SponsorURL)
-			} else {
-				if su.Scheme == "" {
-					su.Scheme = "https"
-				}
-				sponsorMsg += " @ " + su.String()
-			}
-		}
-	}
-	return sponsorMsg
 }

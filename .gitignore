@@ -132,3 +132,5 @@ fabric.properties
 # vendor/
 
 dist/
+
+.idea
