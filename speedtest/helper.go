@@ -109,10 +109,14 @@ func deQueue(s defs.Server, key string) bool {
 
 // doSpeedTest is where the actual speed test happens
 func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *defs.IPInfoResponse) error {
-	if serverCount := len(servers); serverCount > 1 {
-		if !silent || c.Bool(defs.OptionSimple) {
-			fmt.Println("Testing against %d servers\n", serverCount)
+	if !silent || c.Bool(defs.OptionSimple) {
+		if serverCount := len(servers); serverCount > 1 {
+			fmt.Printf("Testing against %d servers\n", serverCount)
+		} else if serverCount == 0 {
+			fmt.Println("No server available")
+			return nil
 		}
+		fmt.Printf("ISP:\t\t%s%s\n", ispInfo.City, ispInfo.Isp)
 	}
 
 	var reps_json []report.JSONReport

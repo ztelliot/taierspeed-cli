@@ -61,9 +61,9 @@ func SpeedTest(c *cli.Context) error {
 	if c.Bool(defs.OptionVersion) {
 		log.SetOutput(os.Stdout)
 		log.Warnf("%s %s (built on %s)", defs.ProgName, defs.ProgVersion, defs.BuildDate)
-		log.Warn("Powered by: TaierSpeed")
-		log.Warn("Project repo: https://github.com/ztelliot/taierspeed-cli")
-		log.Warn("Forked from: https://github.com/librespeed/speedtest-cli")
+		log.Warn("Powered by TaierSpeed")
+		log.Warn("Project: https://github.com/ztelliot/taierspeed-cli")
+		log.Warn("Forked: https://github.com/librespeed/speedtest-cli")
 		return nil
 	}
 
@@ -137,9 +137,6 @@ func SpeedTest(c *cli.Context) error {
 	}
 
 	ispInfo, _ := getIPInfo()
-	if !silent || c.Bool(defs.OptionSimple) {
-		fmt.Printf("ISP:\t\t%s%s\n", ispInfo.City, ispInfo.Isp)
-	}
 
 	// if --server is given, do speed tests with all of them
 	if len(c.StringSlice(defs.OptionServer)) > 0 {
