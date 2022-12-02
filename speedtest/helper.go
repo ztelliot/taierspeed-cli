@@ -24,7 +24,7 @@ import (
 
 const (
 	// the default ping count for measuring ping and jitter
-	pingCount = 10
+	pingCount = 5
 )
 
 func enQueue(s defs.Server) string {
@@ -108,38 +108,38 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *de
 
 		log.Infof("Server:\t\t%s [%s]", currentServer.Name, currentServer.IP)
 
+		// get ping and jitter value
+		var pb *spinner.Spinner
+		if !silent {
+			pb = spinner.New(spinner.CharSets[11], 100*time.Millisecond)
+			pb.Prefix = "Pinging...  "
+			pb.Start()
+		}
+
+		// skip ICMP if option given
+		currentServer.NoICMP = c.Bool(defs.OptionNoICMP)
+
+		p, jitter, err := currentServer.ICMPPingAndJitter(pingCount, c.String(defs.OptionSource))
+		if err != nil {
+			log.Errorf("Failed to get ping and jitter: %s", err)
+			return err
+		}
+
+		if pb != nil {
+			pb.FinalMSG = fmt.Sprintf("Latency:\t%.2f ms (%.2f ms jitter)\n", p, jitter)
+			pb.Stop()
+		}
+
 		token := enQueue(currentServer)
 
 		if len(token) > 0 {
-			// get ping and jitter value
-			var pb *spinner.Spinner
-			if !silent {
-				pb = spinner.New(spinner.CharSets[11], 100*time.Millisecond)
-				pb.Prefix = "Pinging server...  "
-				pb.Start()
-			}
-
-			// skip ICMP if option given
-			currentServer.NoICMP = c.Bool(defs.OptionNoICMP)
-
-			p, jitter, err := currentServer.ICMPPingAndJitter(pingCount, c.String(defs.OptionSource))
-			if err != nil {
-				log.Errorf("Failed to get ping and jitter: %s", err)
-				return err
-			}
-
-			if pb != nil {
-				pb.FinalMSG = fmt.Sprintf("Latency:\t%.2f ms (%.2f ms jitter)\n", p, jitter)
-				pb.Stop()
-			}
-
 			// get download value
 			var downloadValue float64
 			var bytesRead int
 			if c.Bool(defs.OptionNoDownload) {
 				log.Info("Download test is disabled")
 			} else {
-				download, br, err := currentServer.Download(silent, c.Bool(defs.OptionBytes), c.Bool(defs.OptionMebiBytes), c.Int(defs.OptionConcurrent), c.Int(defs.OptionChunks), time.Duration(c.Int(defs.OptionDuration))*time.Second, token)
+				download, br, err := currentServer.Download(silent, c.Bool(defs.OptionBytes), c.Bool(defs.OptionMebiBytes), c.Int(defs.OptionConcurrent), time.Duration(c.Int(defs.OptionDuration))*time.Second, token)
 				if err != nil {
 					log.Errorf("Failed to get download speed: %s", err)
 					return err

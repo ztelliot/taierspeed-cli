@@ -17,7 +17,6 @@ const (
 	OptionServer        = "server"
 	OptionSource        = "source"
 	OptionTimeout       = "timeout"
-	OptionChunks        = "chunks"
 	OptionUploadSize    = "upload-size"
 	OptionDuration      = "duration"
 	OptionNoPreAllocate = "no-pre-allocate"

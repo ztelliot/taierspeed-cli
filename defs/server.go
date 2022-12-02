@@ -9,7 +9,7 @@ import (
 	"io/ioutil"
 	"math"
 	"net/http"
-	"strconv"
+	"runtime"
 	"time"
 
 	"github.com/briandowns/spinner"
@@ -40,7 +40,16 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp string) (float64, float64, e
 		return s.PingAndJitter(count + 2)
 	}
 
-	p := ping.New(s.IP)
+	p, err := ping.NewPinger(s.IP)
+	if err != nil {
+		log.Debugf("ICMP ping failed: %s, will use HTTP ping", err)
+		return s.PingAndJitter(count + 2)
+	}
+
+	if runtime.GOOS == "windows" {
+		p.SetPrivileged(true)
+	}
+
 	p.Count = count
 	p.Timeout = time.Duration(count) * time.Second
 	if srcIp != "" {
@@ -137,7 +146,7 @@ func (s *Server) PingAndJitter(count int) (float64, float64, error) {
 }
 
 // Download performs the actual download test
-func (s *Server) Download(silent bool, useBytes, useMebi bool, requests int, chunks int, duration time.Duration, token string) (float64, int, error) {
+func (s *Server) Download(silent bool, useBytes, useMebi bool, requests int, duration time.Duration, token string) (float64, int, error) {
 	t := time.Now()
 	defer func() {
 		s.TLog.Logf("Download took %s", time.Now().Sub(t).String())
@@ -149,7 +158,7 @@ func (s *Server) Download(silent bool, useBytes, useMebi bool, requests int, chu
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	url := fmt.Sprintf("http://%s:%s/speed/File(1G).dl?key=", s.IP, s.Port, token)
+	url := fmt.Sprintf("http://%s:%s/speed/File(1G).dl?key=%s", s.IP, s.Port, token)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -157,10 +166,8 @@ func (s *Server) Download(silent bool, useBytes, useMebi bool, requests int, chu
 		return 0, 0, err
 	}
 	q := req.URL.Query()
-	q.Set("ckSize", strconv.Itoa(chunks))
 	req.URL.RawQuery = q.Encode()
 	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Accept-Encoding", "identity")
 
 	downloadDone := make(chan struct{}, requests)
 
