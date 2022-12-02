@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -18,8 +19,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 
-	"github.com/librespeed/speedtest-cli/defs"
-	"github.com/librespeed/speedtest-cli/report"
+	"github.com/ztelliot/taierspeed-cli/defs"
+	"github.com/ztelliot/taierspeed-cli/report"
 )
 
 const (
@@ -27,15 +28,27 @@ const (
 	pingCount = 5
 )
 
+func GetRandomIMEI() string {
+	str := "0123456789ABCDEF"
+	bs := []byte(str)
+	var res []byte
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := 0; i < 16; i++ {
+		res = append(res, bs[r.Intn(len(bs))])
+	}
+	return fmt.Sprintf("TS%s", string(res))
+}
+
 func enQueue(s defs.Server) string {
 	time.Local, _ = time.LoadLocation("Asia/Chongqing")
 	ts := strconv.Itoa(int(time.Now().Local().Unix()))
+	imei := GetRandomIMEI()
 
 	md5Ctx := md5.New()
-	md5Ctx.Write([]byte("model=Android&imei=" + defs.IMEI + "&stime=" + ts))
+	md5Ctx.Write([]byte(fmt.Sprintf("model=Android&imei=%s&stime=%s", imei, ts)))
 	token := hex.EncodeToString(md5Ctx.Sum(nil))
 
-	url := fmt.Sprintf("http://%s:%s/speed/dovalid?key=&flag=true&bandwidth=200&model=Android&imei=%s&time=%s&token=%s", s.IP, s.Port, defs.IMEI, ts, token)
+	url := fmt.Sprintf("http://%s:%s/speed/dovalid?key=&flag=true&bandwidth=200&model=Android&imei=%s&time=%s&token=%s", s.IP, s.Port, imei, ts, token)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -106,7 +119,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *de
 	// fetch current user's IP info
 	for _, currentServer := range servers {
 
-		log.Infof("Server:\t\t%s [%s]", currentServer.Name, currentServer.IP)
+		log.Infof("Server:\t\t%s [%s] (id = %s)", currentServer.Name, currentServer.IP, currentServer.ID)
 
 		// get ping and jitter value
 		var pb *spinner.Spinner
@@ -169,9 +182,9 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *de
 			if c.Bool(defs.OptionSimple) {
 				if c.Bool(defs.OptionBytes) {
 					useMebi := c.Bool(defs.OptionMebiBytes)
-					log.Warnf("Latency:\t\t%.2f ms (%.2f ms jitter)\nDownload:\t%s\nUpload:\t\t%s", p, jitter, humanizeMbps(downloadValue, useMebi), humanizeMbps(uploadValue, useMebi))
+					log.Warnf("Latency:\t%.2f ms (%.2f ms jitter)\nDownload:\t%s\nUpload:\t\t%s", p, jitter, humanizeMbps(downloadValue, useMebi), humanizeMbps(uploadValue, useMebi))
 				} else {
-					log.Warnf("Latency:\t\t%.2f ms (%.2f ms jitter)\nDownload:\t%.2f Mbps\nUpload:\t\t%.2f Mbps", p, jitter, downloadValue, uploadValue)
+					log.Warnf("Latency:\t%.2f ms (%.2f ms jitter)\nDownload:\t%.2f Mbps\nUpload:\t\t%.2f Mbps", p, jitter, downloadValue, uploadValue)
 				}
 			}
 
@@ -210,7 +223,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *de
 				reps_json = append(reps_json, rep)
 			}
 		} else {
-			log.Infof("Selected server %s (%s) is not responding at the moment, try again later", currentServer.Name, currentServer.IP)
+			log.Infof("Selected server %s (%s) is not responding at the moment, try again later", currentServer.Name, currentServer.ID)
 		}
 
 		//add a new line after each test if testing multiple servers

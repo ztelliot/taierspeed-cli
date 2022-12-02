@@ -1,6 +1,6 @@
-module github.com/librespeed/speedtest-cli
+module github.com/ztelliot/taierspeed-cli
 
-go 1.14
+go 1.16
 
 require (
 	github.com/briandowns/spinner v1.12.0

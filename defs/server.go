@@ -24,17 +24,11 @@ type Server struct {
 	IP   string `json:"hostip"`
 	Port string `json:"port"`
 
-	NoICMP bool         `json:"-"`
-	TLog   TelemetryLog `json:"-"`
+	NoICMP bool `json:"-"`
 }
 
 // ICMPPingAndJitter pings the server via ICMP echos and calculate the average ping and jitter
 func (s *Server) ICMPPingAndJitter(count int, srcIp string) (float64, float64, error) {
-	t := time.Now()
-	defer func() {
-		s.TLog.Logf("ICMP ping took %s", time.Now().Sub(t).String())
-	}()
-
 	if s.NoICMP {
 		log.Debugf("Skipping ICMP for server %s, will use HTTP ping", s.Name)
 		return s.PingAndJitter(count + 2)
@@ -92,11 +86,6 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp string) (float64, float64, e
 
 // PingAndJitter pings the server via accessing ping URL and calculate the average ping and jitter
 func (s *Server) PingAndJitter(count int) (float64, float64, error) {
-	t := time.Now()
-	defer func() {
-		s.TLog.Logf("TCP ping took %s", time.Now().Sub(t).String())
-	}()
-
 	url := fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
 
 	var pings []float64
@@ -147,11 +136,6 @@ func (s *Server) PingAndJitter(count int) (float64, float64, error) {
 
 // Download performs the actual download test
 func (s *Server) Download(silent bool, useBytes, useMebi bool, requests int, duration time.Duration, token string) (float64, int, error) {
-	t := time.Now()
-	defer func() {
-		s.TLog.Logf("Download took %s", time.Now().Sub(t).String())
-	}()
-
 	counter := NewCounter()
 	counter.SetMebi(useMebi)
 
@@ -203,9 +187,9 @@ func (s *Server) Download(silent bool, useBytes, useMebi bool, requests int, dur
 		pb.Start()
 		defer func() {
 			if useBytes {
-				pb.FinalMSG = fmt.Sprintf("Download:\t%s\n", counter.AvgHumanize())
+				pb.FinalMSG = fmt.Sprintf("Download:\t%s\n (data used: %s)", counter.AvgHumanize(), counter.BytesHumanize())
 			} else {
-				pb.FinalMSG = fmt.Sprintf("Download:\t%.2f Mbps\n", counter.AvgMbps())
+				pb.FinalMSG = fmt.Sprintf("Download:\t%.2f Mbps (data used: %.2f MB)\n", counter.AvgMbps(), counter.MBytes())
 			}
 			pb.Stop()
 		}()
@@ -232,11 +216,6 @@ Loop:
 
 // Upload performs the actual upload test
 func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests int, uploadSize int, duration time.Duration, token string) (float64, int, error) {
-	t := time.Now()
-	defer func() {
-		s.TLog.Logf("Upload took %s", time.Now().Sub(t).String())
-	}()
-
 	counter := NewCounter()
 	counter.SetMebi(useMebi)
 	counter.SetUploadSize(uploadSize)
@@ -290,9 +269,9 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests int
 		pb.Start()
 		defer func() {
 			if useBytes {
-				pb.FinalMSG = fmt.Sprintf("Upload:\t\t%s\n", counter.AvgHumanize())
+				pb.FinalMSG = fmt.Sprintf("Upload:\t\t%s (data used: %s)\n", counter.AvgHumanize(), counter.BytesHumanize())
 			} else {
-				pb.FinalMSG = fmt.Sprintf("Upload:\t\t%.2f Mbps\n", counter.AvgMbps())
+				pb.FinalMSG = fmt.Sprintf("Upload:\t\t%.2f Mbps (data used: %.2f MB)\n", counter.AvgMbps(), counter.MBytes())
 			}
 			pb.Stop()
 		}()

@@ -1,7 +1,7 @@
 package report
 
 import (
-	"github.com/librespeed/speedtest-cli/defs"
+	"github.com/ztelliot/taierspeed-cli/defs"
 	"time"
 )
 

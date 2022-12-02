@@ -97,6 +97,40 @@ func (c *BytesCounter) AvgHumanize() string {
 	}
 }
 
+// Bytes returns the Bytes
+func (c *BytesCounter) Bytes() float64 {
+	return float64(c.total) / 8
+}
+
+// MBytes returns the MBytes
+func (c *BytesCounter) MBytes() float64 {
+	var base float64 = 125000
+	if c.mebi {
+		base = 131072
+	}
+	return c.Bytes() / base
+}
+
+// BytesHumanize returns the Bytes/KiloBytes/MegaBytes/GigaBytes (or Bytes/KibiBytes/MebiBytes/GibiBytes)
+func (c *BytesCounter) BytesHumanize() string {
+	val := c.Bytes()
+
+	var base float64 = 1000
+	if c.mebi {
+		base = 1024
+	}
+
+	if val < base {
+		return fmt.Sprintf("%.2f bytes", val)
+	} else if val/base < base {
+		return fmt.Sprintf("%.2f KB", val/base)
+	} else if val/base/base < base {
+		return fmt.Sprintf("%.2f MB", val/base/base)
+	} else {
+		return fmt.Sprintf("%.2f GB", val/base/base/base)
+	}
+}
+
 // GenerateBlob generates a random byte array of `uploadSize` in the `payload` field, and sets the `reader` field to
 // read from it
 func (c *BytesCounter) GenerateBlob() {

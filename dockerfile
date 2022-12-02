@@ -1,17 +1,17 @@
 FROM golang:1.17.7-buster as builder
 
 # Set working directory
-WORKDIR /usr/src/librespeed-cli
+WORKDIR /usr/src/taierspeed-cli
 
-# Copy librespeed-cli
+# Copy taierspeed-cli
 COPY . .
 
-# Build librespeed-cli
+# Build taierspeed-cli
 RUN ./build.sh
 
 FROM golang:1.17.7-buster
 
-# Copy librespeed-cli binary
-COPY --from=builder /usr/src/librespeed-cli/out/librespeed-cli* /usr/src/librespeed-cli/librespeed-cli
+# Copy taierspeed-cli binary
+COPY --from=builder /usr/src/taierspeed-cli/out/taierspeed-cli* /usr/src/taierspeed-cli/taierspeed-cli
 
-ENTRYPOINT ["/usr/src/librespeed-cli/librespeed-cli"]
+ENTRYPOINT ["/usr/src/taierspeed-cli/taierspeed-cli"]

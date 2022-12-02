@@ -2,6 +2,7 @@ package speedtest
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,13 +17,16 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 
-	"github.com/librespeed/speedtest-cli/defs"
-	"github.com/librespeed/speedtest-cli/report"
+	"github.com/ztelliot/taierspeed-cli/defs"
+	"github.com/ztelliot/taierspeed-cli/report"
 )
 
 const (
 	apiBaseUrl = `https://dlc.cnspeedtest.com`
 )
+
+//go:embed serverlist.json
+var ServerListByte []byte
 
 type PingJob struct {
 	Index  int
@@ -57,8 +61,9 @@ func SpeedTest(c *cli.Context) error {
 	if c.Bool(defs.OptionVersion) {
 		log.SetOutput(os.Stdout)
 		log.Warnf("%s %s (built on %s)", defs.ProgName, defs.ProgVersion, defs.BuildDate)
-		log.Warn("Ori: https://github.com/librespeed/speedtest-cli")
-		log.Warn("Licensed under GNU Lesser General Public License v3.0")
+		log.Warn("Powered by: TaierSpeed")
+		log.Warn("Project repo: https://github.com/ztelliot/taierspeed-cli")
+		log.Warn("Forked from: https://github.com/librespeed/speedtest-cli")
 		return nil
 	}
 
@@ -112,12 +117,13 @@ func SpeedTest(c *cli.Context) error {
 
 	if c.Bool(defs.OptionList) || len(c.StringSlice(defs.OptionServer)) > 0 {
 		// fetch the server list JSON and parse it into the `servers` array
-		serverUrl := apiBaseUrl + "/TaierAndroid/Config/serverlist_normal.json"
-		log.Infof("Retrieving server list")
+		log.Infof("Parsing server list")
 
-		servers, err = getServerList(serverUrl, c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList))
+		if err := json.Unmarshal(ServerListByte, &servers); err == nil {
+			servers, err = preprocessServers(servers, c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList))
+		}
 		if err != nil {
-			log.Errorf("Error when fetching server list: %s", err)
+			log.Errorf("Error when parsing server list: %s", err)
 			return err
 		}
 
@@ -128,28 +134,24 @@ func SpeedTest(c *cli.Context) error {
 			}
 			return nil
 		}
-
-		// if --server is given, do speed tests with all of them
-		if len(c.StringSlice(defs.OptionServer)) > 0 {
-			ispInfo, _ := getIPInfo()
-			log.Infof("ISP:\t\t%s%s", ispInfo.City, ispInfo.Isp)
-
-			return doSpeedTest(c, servers, silent, ispInfo)
-		}
 	}
 
 	ispInfo, _ := getIPInfo()
 	log.Infof("ISP:\t\t%s%s", ispInfo.City, ispInfo.Isp)
 
-	servers, err = getOneServer(ispInfo.IP)
-
-	return doSpeedTest(c, servers, silent, ispInfo)
+	// if --server is given, do speed tests with all of them
+	if len(c.StringSlice(defs.OptionServer)) > 0 {
+		return doSpeedTest(c, servers, silent, ispInfo)
+	} else {
+		servers, err = getOneServer(ispInfo.IP)
+		return doSpeedTest(c, servers, silent, ispInfo)
+	}
 }
 
 func getOneServer(ip string) ([]defs.Server, error) {
 	var server defs.Server
-	uri := "/dataServer/mobilematch.php?ip=" + ip + "&network=4"
-	req, err := http.NewRequest(http.MethodGet, apiBaseUrl+uri, nil)
+	url := fmt.Sprintf("%s/dataServer/mobilematch.php?ip=%s&network=4", apiBaseUrl, ip)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -170,35 +172,7 @@ func getOneServer(ip string) ([]defs.Server, error) {
 		return nil, err
 	}
 
-	return preprocessServers([]defs.Server{server}, nil, false)
-}
-
-// getServerList fetches the server JSON from a remote server
-func getServerList(serverList string, specific []string, filter bool) ([]defs.Server, error) {
-	// getting the server list from remote
-	var servers []defs.Server
-	req, err := http.NewRequest(http.MethodGet, serverList, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", defs.UserAgent)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if err := json.Unmarshal(b, &servers); err != nil {
-		return nil, err
-	}
-
-	return preprocessServers(servers, specific, filter)
+	return []defs.Server{server}, nil
 }
 
 // preprocessServers makes some needed modifications to the servers fetched
@@ -228,7 +202,8 @@ func getIPInfo() (*defs.IPInfoResponse, error) {
 	var ipInfo defs.IPInfoResponse
 	var ispRaw []string
 
-	req, err := http.NewRequest(http.MethodGet, apiBaseUrl+"/dataServer/getIpLocS.php", nil)
+	url := fmt.Sprintf("%s/dataServer/getIpLocS.php", apiBaseUrl)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return nil, err

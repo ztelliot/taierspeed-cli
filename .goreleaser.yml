@@ -11,7 +11,7 @@ builds:
   flags:
     - -trimpath
   ldflags:
-    - -w -s -X "librespeed-cli/defs.ProgName={{ .ProjectName }}" -X "librespeed-cli/defs.ProgVersion=v{{ .Version }}" -X "librespeed-cli/defs.BuildDate={{ .Date }}"
+    - -w -s -X "taierspeed-cli/defs.ProgName={{ .ProjectName }}" -X "taierspeed-cli/defs.ProgVersion=v{{ .Version }}" -X "taierspeed-cli/defs.BuildDate={{ .Date }}"
   goos:
     - linux
     - darwin
@@ -39,7 +39,7 @@ builds:
   flags:
     - -trimpath
   ldflags:
-    - -w -s -X "librespeed-cli/defs.ProgName={{ .ProjectName }}" -X "librespeed-cli/defs.ProgVersion=v{{ .Version }}" -X "librespeed-cli/defs.BuildDate={{ .Date }}"
+    - -w -s -X "taierspeed-cli/defs.ProgName={{ .ProjectName }}" -X "taierspeed-cli/defs.ProgVersion=v{{ .Version }}" -X "taierspeed-cli/defs.BuildDate={{ .Date }}"
   goos:
     - linux
     - windows
@@ -79,6 +79,6 @@ changelog:
   sort: asc
 release:
   github:
-    owner: taierspeed
-    name: speedtest-cli
+    owner: ztelliot
+    name: taierspeed-cli
   disable: false
