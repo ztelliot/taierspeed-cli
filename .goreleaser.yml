@@ -11,7 +11,7 @@ builds:
   flags:
     - -trimpath
   ldflags:
-    - -w -s -X "taierspeed-cli/defs.ProgName={{ .ProjectName }}" -X "taierspeed-cli/defs.ProgVersion=v{{ .Version }}" -X "taierspeed-cli/defs.BuildDate={{ .Date }}"
+    - -w -s -X "github.com/ztelliot/taierspeed-cli/defs.ProgName={{ .ProjectName }}" -X "github.com/ztelliot/taierspeed-cli/defs.ProgVersion=v{{ .Version }}" -X "github.com/ztelliot/taierspeed-cli/defs.BuildDate={{ .Date }}"
   goos:
     - linux
     - darwin
@@ -39,7 +39,7 @@ builds:
   flags:
     - -trimpath
   ldflags:
-    - -w -s -X "taierspeed-cli/defs.ProgName={{ .ProjectName }}" -X "taierspeed-cli/defs.ProgVersion=v{{ .Version }}" -X "taierspeed-cli/defs.BuildDate={{ .Date }}"
+    - -w -s -X "github.com/ztelliot/taierspeed-cli/defs.ProgName={{ .ProjectName }}" -X "github.com/ztelliot/taierspeed-cli/defs.ProgVersion=v{{ .Version }}" -X "github.com/ztelliot/taierspeed-cli/defs.BuildDate={{ .Date }}"
   goos:
     - linux
     - windows

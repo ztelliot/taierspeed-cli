@@ -110,7 +110,9 @@ func deQueue(s defs.Server, key string) bool {
 // doSpeedTest is where the actual speed test happens
 func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *defs.IPInfoResponse) error {
 	if serverCount := len(servers); serverCount > 1 {
-		log.Infof("Testing against %d servers", serverCount)
+		if !silent || c.Bool(defs.OptionSimple) {
+			fmt.Println("Testing against %d servers\n", serverCount)
+		}
 	}
 
 	var reps_json []report.JSONReport
@@ -118,8 +120,9 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *de
 
 	// fetch current user's IP info
 	for _, currentServer := range servers {
-
-		log.Infof("Server:\t\t%s [%s] (id = %s)", currentServer.Name, currentServer.IP, currentServer.ID)
+		if !silent || c.Bool(defs.OptionSimple) {
+			fmt.Printf("Server:\t\t%s [%s] (id = %s)\n", currentServer.Name, currentServer.IP, currentServer.ID)
+		}
 
 		// get ping and jitter value
 		var pb *spinner.Spinner
@@ -141,6 +144,8 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *de
 		if pb != nil {
 			pb.FinalMSG = fmt.Sprintf("Latency:\t%.2f ms (%.2f ms jitter)\n", p, jitter)
 			pb.Stop()
+		} else if c.Bool(defs.OptionSimple) {
+			fmt.Printf("Latency:\t%.2f ms (%.2f ms jitter)\n", p, jitter)
 		}
 
 		token := enQueue(currentServer)
@@ -157,6 +162,14 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *de
 					log.Errorf("Failed to get download speed: %s", err)
 					return err
 				}
+				if c.Bool(defs.OptionSimple) {
+					if c.Bool(defs.OptionBytes) {
+						useMebi := c.Bool(defs.OptionMebiBytes)
+						fmt.Printf("Download:\t%s (data used: %s)\n", humanizeMbps(download, useMebi), humanizeBytes(br, useMebi))
+					} else {
+						fmt.Printf("Download:\t%.2f Mbps (data used: %.2f MB)\n", download, float64(br)/1000000)
+					}
+				}
 				downloadValue = download
 				bytesRead = br
 			}
@@ -172,21 +185,19 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *de
 					log.Errorf("Failed to get upload speed: %s", err)
 					return err
 				}
+				if c.Bool(defs.OptionSimple) {
+					if c.Bool(defs.OptionBytes) {
+						useMebi := c.Bool(defs.OptionMebiBytes)
+						fmt.Printf("Upload:\t\t%s (data used: %s)\n", humanizeMbps(upload, useMebi), humanizeBytes(bw, useMebi))
+					} else {
+						fmt.Printf("Upload:\t\t%.2f Mbps (data used: %.2f MB)\n", upload, float64(bw)/1000000)
+					}
+				}
 				uploadValue = upload
 				bytesWritten = bw
 			}
 
 			deQueue(currentServer, token)
-
-			// print result if --simple is given
-			if c.Bool(defs.OptionSimple) {
-				if c.Bool(defs.OptionBytes) {
-					useMebi := c.Bool(defs.OptionMebiBytes)
-					log.Warnf("Latency:\t%.2f ms (%.2f ms jitter)\nDownload:\t%s\nUpload:\t\t%s", p, jitter, humanizeMbps(downloadValue, useMebi), humanizeMbps(uploadValue, useMebi))
-				} else {
-					log.Warnf("Latency:\t%.2f ms (%.2f ms jitter)\nDownload:\t%.2f Mbps\nUpload:\t\t%.2f Mbps", p, jitter, downloadValue, uploadValue)
-				}
-			}
 
 			// check for --csv or --json. the program prioritize the --csv before the --json. this is the same behavior as speedtest-cli
 			if c.Bool(defs.OptionCSV) {
@@ -268,5 +279,26 @@ func humanizeMbps(mbps float64, useMebi bool) string {
 		return fmt.Sprintf("%.2f GB/s", val/base)
 	} else {
 		return fmt.Sprintf("%.2f MB/s", val)
+	}
+}
+
+// humanizeBytes returns the Bytes/KiloBytes/MegaBytes/GigaBytes (or Bytes/KibiBytes/MebiBytes/GibiBytes)
+func humanizeBytes(bytes int, useMebi bool) string {
+	val := float64(bytes) / 8
+	var base float64 = 1000
+	if useMebi {
+		base = 1024
+	}
+
+	if val < 1 {
+		if kb := val * base; kb < 1 {
+			return fmt.Sprintf("%.2f bytes", kb*base)
+		} else {
+			return fmt.Sprintf("%.2f KB", kb)
+		}
+	} else if val > base {
+		return fmt.Sprintf("%.2f GB", val/base)
+	} else {
+		return fmt.Sprintf("%.2f MB", val)
 	}
 }

@@ -130,14 +130,16 @@ func SpeedTest(c *cli.Context) error {
 		// if --list is given, list all the servers fetched and exit
 		if c.Bool(defs.OptionList) {
 			for _, svr := range servers {
-				log.Warnf("%s: %s (%s)", svr.ID, svr.Name, svr.IP)
+				fmt.Printf("%s: %s (%s)\n", svr.ID, svr.Name, svr.IP)
 			}
 			return nil
 		}
 	}
 
 	ispInfo, _ := getIPInfo()
-	log.Infof("ISP:\t\t%s%s", ispInfo.City, ispInfo.Isp)
+	if !silent || c.Bool(defs.OptionSimple) {
+		fmt.Printf("ISP:\t\t%s%s\n", ispInfo.City, ispInfo.Isp)
+	}
 
 	// if --server is given, do speed tests with all of them
 	if len(c.StringSlice(defs.OptionServer)) > 0 {
