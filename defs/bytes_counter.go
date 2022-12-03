@@ -169,7 +169,7 @@ func (r *SeekWrapper) Seek(offset int64, whence int) (int64, error) {
 	return 0, nil
 }
 
-// getAvg returns the average value of an float64 array
+// getAvg returns the average value of a float64 array
 func getAvg(vals []float64) float64 {
 	var total float64
 	for _, v := range vals {

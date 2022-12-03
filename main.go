@@ -35,8 +35,9 @@ func main() {
 		Flags: []cli.Flag{
 			cli.HelpFlag,
 			&cli.BoolFlag{
-				Name:  defs.OptionVersion,
-				Usage: "Show the version number and exit",
+				Name:    defs.OptionVersion,
+				Aliases: []string{defs.OptionVersionAlt},
+				Usage:   "Show the version number and exit",
 			},
 			&cli.BoolFlag{
 				Name:  defs.OptionNoDownload,
@@ -52,9 +53,10 @@ func main() {
 					"\tat this moment, so you might want to disable it",
 			},
 			&cli.IntFlag{
-				Name:  defs.OptionConcurrent,
-				Usage: "Concurrent HTTP requests being made",
-				Value: 3,
+				Name:    defs.OptionConcurrent,
+				Aliases: []string{defs.OptionConcurrentAlt},
+				Usage:   "Concurrent HTTP requests being made",
+				Value:   3,
 			},
 			&cli.BoolFlag{
 				Name: defs.OptionBytes,
@@ -67,8 +69,9 @@ func main() {
 				Usage: "Use 1024 bytes as 1 kilobyte instead of 1000",
 			},
 			&cli.BoolFlag{
-				Name:  defs.OptionSimple,
-				Usage: "Suppress verbose output, only show basic information\n\t",
+				Name:    defs.OptionSimple,
+				Aliases: []string{defs.OptionSimpleAlt},
+				Usage:   "Suppress verbose output, only show basic information\n\t",
 			},
 			&cli.BoolFlag{
 				Name: defs.OptionCSV,
@@ -92,13 +95,20 @@ func main() {
 					"\taffected by --bytes",
 			},
 			&cli.BoolFlag{
-				Name:  defs.OptionList,
-				Usage: "Display a list of TaierSpeed servers",
+				Name:    defs.OptionList,
+				Aliases: []string{defs.OptionListAlt},
+				Usage:   "Display a list of TaierSpeed servers",
 			},
-			&cli.StringSliceFlag{
-				Name: defs.OptionServer,
+			&cli.IntSliceFlag{
+				Name:    defs.OptionServer,
+				Aliases: []string{defs.OptionServerAlt},
 				Usage: "Specify a `SERVER` ID to test against. Can be supplied\n" +
-					"\tmultiple times.",
+					"\tmultiple times. Cannot be used with --exclude",
+			},
+			&cli.IntSliceFlag{
+				Name: defs.OptionExclude,
+				Usage: "`EXCLUDE` a server from selection. Can be supplied\n" +
+					"\tmultiple times. Cannot be used with --server",
 			},
 			&cli.StringFlag{
 				Name:  defs.OptionSource,
@@ -110,9 +120,10 @@ func main() {
 				Value: 15,
 			},
 			&cli.IntFlag{
-				Name:  defs.OptionDuration,
-				Usage: "Upload and download test duration in seconds",
-				Value: 15,
+				Name:    defs.OptionDuration,
+				Aliases: []string{defs.OptionDurationAlt},
+				Usage:   "Upload and download test duration in seconds",
+				Value:   15,
 			},
 			&cli.IntFlag{
 				Name:  defs.OptionUploadSize,
@@ -131,6 +142,11 @@ func main() {
 				Aliases: []string{"verbose"},
 				Usage:   "Debug mode (verbose logging)",
 				Hidden:  true,
+			},
+			&cli.BoolFlag{
+				Name:    defs.OptionExperiment,
+				Aliases: []string{defs.OptionExperimentAlt},
+				Usage:   "Use experimental servers",
 			},
 		},
 	}

@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
-	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/briandowns/spinner"
@@ -28,21 +28,10 @@ const (
 	pingCount = 5
 )
 
-func GetRandomIMEI() string {
-	str := "0123456789ABCDEF"
-	bs := []byte(str)
-	var res []byte
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := 0; i < 16; i++ {
-		res = append(res, bs[r.Intn(len(bs))])
-	}
-	return fmt.Sprintf("TS%s", string(res))
-}
-
 func enQueue(s defs.Server) string {
 	time.Local, _ = time.LoadLocation("Asia/Chongqing")
 	ts := strconv.Itoa(int(time.Now().Local().Unix()))
-	imei := GetRandomIMEI()
+	imei := GetRandom("IMEI")
 
 	md5Ctx := md5.New()
 	md5Ctx.Write([]byte(fmt.Sprintf("model=Android&imei=%s&stime=%s", imei, ts)))
@@ -55,7 +44,7 @@ func enQueue(s defs.Server) string {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return ""
 	}
-	req.Header.Set("User-Agent", defs.UserAgent)
+	req.Header.Set("User-Agent", defs.UserAgentTS)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -85,7 +74,7 @@ func deQueue(s defs.Server, key string) bool {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return false
 	}
-	req.Header.Set("User-Agent", defs.UserAgent)
+	req.Header.Set("User-Agent", defs.UserAgentTS)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -116,7 +105,11 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *de
 			fmt.Println("No server available")
 			return nil
 		}
-		fmt.Printf("ISP:\t\t%s%s\n", ispInfo.City, ispInfo.Isp)
+		if ispInfo != nil {
+			fmt.Printf("ISP:\t\t%s%s\n", ispInfo.City, ispInfo.Isp)
+		} else {
+			fmt.Printf("ISP:\n")
+		}
 	}
 
 	var reps_json []report.JSONReport
@@ -125,36 +118,48 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *de
 	// fetch current user's IP info
 	for _, currentServer := range servers {
 		if !silent || c.Bool(defs.OptionSimple) {
-			fmt.Printf("Server:\t\t%s [%s] (id = %s)\n", currentServer.Name, currentServer.IP, currentServer.ID)
+			if currentServer.Perception {
+				line := strings.Split(currentServer.Line, "-")
+				fmt.Printf("Server:\t\t%s - %s [%s] (id = %d)\n", currentServer.Name, line[len(line)-1], currentServer.IP, currentServer.ID)
+			} else {
+				fmt.Printf("Server:\t\t%s [%s] (id = %d)\n", currentServer.Name, currentServer.IP, currentServer.ID)
+			}
 		}
 
-		// get ping and jitter value
-		var pb *spinner.Spinner
-		if !silent {
-			pb = spinner.New(spinner.CharSets[11], 100*time.Millisecond)
-			pb.Prefix = "Pinging...  "
-			pb.Start()
-		}
+		if currentServer.IsUp() {
+			// get ping and jitter value
+			var pb *spinner.Spinner
+			if !silent {
+				pb = spinner.New(spinner.CharSets[11], 100*time.Millisecond)
+				pb.Prefix = "Pinging...  "
+				pb.Start()
+			}
 
-		// skip ICMP if option given
-		currentServer.NoICMP = c.Bool(defs.OptionNoICMP)
+			// skip ICMP if option given
+			currentServer.NoICMP = c.Bool(defs.OptionNoICMP)
 
-		p, jitter, err := currentServer.ICMPPingAndJitter(pingCount, c.String(defs.OptionSource))
-		if err != nil {
-			log.Errorf("Failed to get ping and jitter: %s", err)
-			return err
-		}
+			p, jitter, err := currentServer.ICMPPingAndJitter(pingCount, c.String(defs.OptionSource))
+			if err != nil {
+				log.Errorf("Failed to get ping and jitter: %s", err)
+				return err
+			}
 
-		if pb != nil {
-			pb.FinalMSG = fmt.Sprintf("Latency:\t%.2f ms (%.2f ms jitter)\n", p, jitter)
-			pb.Stop()
-		} else if c.Bool(defs.OptionSimple) {
-			fmt.Printf("Latency:\t%.2f ms (%.2f ms jitter)\n", p, jitter)
-		}
+			if pb != nil {
+				pb.FinalMSG = fmt.Sprintf("Latency:\t%.2f ms (%.2f ms jitter)\n", p, jitter)
+				pb.Stop()
+			} else if c.Bool(defs.OptionSimple) {
+				fmt.Printf("Latency:\t%.2f ms (%.2f ms jitter)\n", p, jitter)
+			}
 
-		token := enQueue(currentServer)
+			token := ""
+			if !currentServer.Perception {
+				token = enQueue(currentServer)
+				if len(token) <= 0 {
+					log.Errorf("Get token failed")
+					return nil
+				}
+			}
 
-		if len(token) > 0 {
 			// get download value
 			var downloadValue float64
 			var bytesRead int
@@ -201,7 +206,9 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *de
 				bytesWritten = bw
 			}
 
-			deQueue(currentServer, token)
+			if !currentServer.Perception {
+				deQueue(currentServer, token)
+			}
 
 			// check for --csv or --json. the program prioritize the --csv before the --json. this is the same behavior as speedtest-cli
 			if c.Bool(defs.OptionCSV) {

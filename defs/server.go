@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"math"
 	"net/http"
+	"net/url"
 	"runtime"
 	"time"
 
@@ -19,12 +20,64 @@ import (
 
 // Server represents a speed test server
 type Server struct {
-	ID   string `json:"hostid"`
+	ID   int    `json:"id"`
+	Name string `json:"server_name"`
+	IP   string `json:"server_ip"`
+	Port string `json:"-"`
+
+	Line        string `json:"city"`
+	DownloadURL string `json:"http_downloadUrl"`
+	UploadURL   string `json:"http_uploadUrl"`
+	PingURL     string `json:"ping_url"`
+
+	HwType            int    `json:"hw_type"`
+	HwPingHeaders     string `json:"hw_httpPingHeaders"`
+	HwDownloadHeaders string `json:"hw_httpDlHeaders"`
+	HwUploadHeaders   string `json:"hw_httpUlHeaders"`
+
+	NoICMP     bool `json:"-"`
+	Perception bool `json:"-"`
+}
+
+type ServerTmp struct {
+	ID   int    `json:"hostid,string"`
 	Name string `json:"hostname"`
 	IP   string `json:"hostip"`
 	Port string `json:"port"`
+}
 
-	NoICMP bool `json:"-"`
+// IsUp checks the speed test backend is up by accessing the ping URL
+func (s *Server) IsUp() bool {
+	target := ""
+	ua := ""
+	if s.Perception {
+		target = s.PingURL
+		ua = UserAgentHW
+	} else {
+		target = fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
+		ua = UserAgentTS
+	}
+
+	req, err := http.NewRequest(http.MethodGet, target, nil)
+	if err != nil {
+		log.Debugf("Failed when creating HTTP request: %s", err)
+		return false
+	}
+	req.Header.Set("User-Agent", ua)
+
+	if s.HwType == 1 {
+		req.Host = s.HwPingHeaders
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Debugf("Error checking for server status: %s", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	// only return online if the ping URL returns nothing and 200
+	return (resp.StatusCode == http.StatusOK) || (resp.StatusCode == http.StatusForbidden)
 }
 
 // ICMPPingAndJitter pings the server via ICMP echos and calculate the average ping and jitter
@@ -34,7 +87,20 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp string) (float64, float64, e
 		return s.PingAndJitter(count + 2)
 	}
 
-	p, err := ping.NewPinger(s.IP)
+	target := ""
+
+	if s.Perception {
+		u, err := url.Parse(s.PingURL)
+		if err != nil {
+			log.Debugf("Failed when parsing server URL: %s", err)
+			return 0, 0, err
+		}
+		target = u.Hostname()
+	} else {
+		target = s.IP
+	}
+
+	p, err := ping.NewPinger(target)
 	if err != nil {
 		log.Debugf("ICMP ping failed: %s, will use HTTP ping", err)
 		return s.PingAndJitter(count + 2)
@@ -86,16 +152,28 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp string) (float64, float64, e
 
 // PingAndJitter pings the server via accessing ping URL and calculate the average ping and jitter
 func (s *Server) PingAndJitter(count int) (float64, float64, error) {
-	url := fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
+	target := ""
+	ua := ""
+
+	if s.Perception {
+		target = s.PingURL
+		ua = UserAgentHW
+	} else {
+		target = fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
+		ua = UserAgentTS
+	}
 
 	var pings []float64
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequest(http.MethodGet, target, nil)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
 	}
-	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("User-Agent", ua)
+	if s.HwType == 1 {
+		req.Host = s.HwPingHeaders
+	}
 
 	for i := 0; i < count; i++ {
 		start := time.Now()
@@ -142,16 +220,28 @@ func (s *Server) Download(silent bool, useBytes, useMebi bool, requests int, dur
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	url := fmt.Sprintf("http://%s:%s/speed/File(1G).dl?key=%s", s.IP, s.Port, token)
+	uri := ""
+	ua := ""
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if s.Perception {
+		uri = s.DownloadURL
+		ua = UserAgentHW
+	} else {
+		uri = fmt.Sprintf("http://%s:%s/speed/File(1G).dl?key=%s", s.IP, s.Port, token)
+		ua = UserAgentTS
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
 	}
 	q := req.URL.Query()
 	req.URL.RawQuery = q.Encode()
-	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("User-Agent", ua)
+	if s.HwType == 1 {
+		req.Host = s.HwDownloadHeaders
+	}
 
 	downloadDone := make(chan struct{}, requests)
 
@@ -229,14 +319,31 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests int
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	url := fmt.Sprintf("http://%s:%s/speed/doAnalsLoad.do", s.IP, s.Port)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, counter)
+
+	uri := ""
+	ua := ""
+
+	if s.Perception {
+		uri = s.UploadURL
+		ua = UserAgentHW
+	} else {
+		uri = fmt.Sprintf("http://%s:%s/speed/doAnalsLoad.do", s.IP, s.Port)
+		ua = UserAgentTS
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, counter)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
 	}
-	req.Header.Set("User-Agent", UserAgent)
-	req.Header.Set("Key", token)
+	req.Header.Set("User-Agent", ua)
+	if s.HwType == 1 {
+		req.Host = s.HwUploadHeaders
+	}
+
+	if !s.Perception {
+		req.Header.Set("Key", token)
+	}
 
 	uploadDone := make(chan struct{}, requests)
 
