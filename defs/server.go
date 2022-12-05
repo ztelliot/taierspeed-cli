@@ -25,7 +25,9 @@ type Server struct {
 	IP   string `json:"server_ip"`
 	Port string `json:"-"`
 
-	Line        string `json:"city"`
+	Province string `json:"province"`
+	City     string `json:"city"`
+
 	DownloadURL string `json:"http_downloadUrl"`
 	UploadURL   string `json:"http_uploadUrl"`
 	PingURL     string `json:"ping_url"`
@@ -44,6 +46,7 @@ type ServerTmp struct {
 	Name string `json:"hostname"`
 	IP   string `json:"hostip"`
 	Port string `json:"port"`
+	Prov string `json:"pname"`
 }
 
 // IsUp checks the speed test backend is up by accessing the ping URL

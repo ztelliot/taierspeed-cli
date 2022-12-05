@@ -13,7 +13,6 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -30,11 +29,13 @@ import (
 const (
 	apiBaseUrl           = `https://dlc.cnspeedtest.com`
 	apiPerceptionBaseUrl = `http://ux.caict.ac.cn`
-	apiGetIP             = `https://api-v3.speedtest.cn/ip`
 )
 
 //go:embed serverlist.json
 var ServerListByte []byte
+
+//go:embed province.csv
+var ProvinceListByte []byte
 
 type PingJob struct {
 	Index  int
@@ -255,6 +256,13 @@ func SpeedTest(c *cli.Context) error {
 	// load server list
 	var servers []defs.Server
 	var err error
+	var provinces []defs.ProvinceInfo
+	var prov *defs.ProvinceInfo
+
+	if err := gocsv.UnmarshalBytes(ProvinceListByte, &provinces); err != nil {
+		log.Error("Failed to load province info")
+		return err
+	}
 
 	if c.Bool(defs.OptionExperiment) {
 		//deviceId, err = Register()
@@ -265,12 +273,20 @@ func SpeedTest(c *cli.Context) error {
 
 		deviceId = defs.DeviceID
 
-		ispInfo, _ = getIPInfoSPCN()
+		ispInfo, _ = getIPInfo()
+
+		if ispInfo != nil {
+			if ispInfo.Country != "中国" {
+				prov = getProvInfo(provinces, "上海")
+			} else {
+				prov = getProvInfo(provinces, ispInfo.Region)
+			}
+		}
 
 		// fetch the server list JSON and parse it into the `servers` array
 		log.Infof("Retrieving server list")
 
-		servers, err = getServerList(deviceId, ispInfo, c.IntSlice(defs.OptionExclude), c.IntSlice(defs.OptionServer), !c.Bool(defs.OptionList), true)
+		servers, err = getServerList(deviceId, prov, c.IntSlice(defs.OptionExclude), c.IntSlice(defs.OptionServer), !c.Bool(defs.OptionList), true)
 
 		if err != nil {
 			log.Errorf("Error when fetching server list: %s", err)
@@ -284,8 +300,8 @@ func SpeedTest(c *cli.Context) error {
 			var serversT []defs.ServerTmp
 
 			if err := json.Unmarshal(ServerListByte, &serversT); err == nil {
-				for _, serverT := range serversT {
-					servers = append(servers, defs.Server{ID: serverT.ID, IP: serverT.IP, Port: serverT.Port, Name: serverT.Name})
+				for _, s := range serversT {
+					servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov})
 				}
 				servers, err = preprocessServers(servers, c.IntSlice(defs.OptionExclude), c.IntSlice(defs.OptionServer), !c.Bool(defs.OptionList), false)
 			}
@@ -403,7 +419,7 @@ func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGro
 }
 
 // getServerList fetches the server JSON from a remote server
-func getServerList(deviceId string, ispInfo *defs.IPInfoResponse, excludes, specific []int, filter bool, perception bool) ([]defs.Server, error) {
+func getServerList(deviceId string, prov *defs.ProvinceInfo, excludes, specific []int, filter bool, perception bool) ([]defs.Server, error) {
 	// --exclude and --server cannot be used at the same time
 	if len(excludes) > 0 && len(specific) > 0 {
 		return nil, errors.New("either --exclude or --server can be used")
@@ -413,25 +429,16 @@ func getServerList(deviceId string, ispInfo *defs.IPInfoResponse, excludes, spec
 	var servers []defs.Server
 	old := false
 
-	prov := ""
-	if ispInfo != nil {
-		prov := ispInfo.Region
-		if ispInfo.City == ispInfo.Region {
-			prov += "市"
-		} else {
-			prov += "省"
-		}
-		prov = url.QueryEscape(prov)
-	}
-
 	uri := ""
-	if ispInfo != nil && ispInfo.Lon != "" && ispInfo.Lat != "" {
-		uri = fmt.Sprintf("%s/screen/taier/app/getSpeedServiceByUserId?deviceId=%s&lon=%s&lat=%s&userId=-10000&province=%s&operatorId=-1", apiPerceptionBaseUrl, deviceId, ispInfo.Lon, ispInfo.Lat, prov)
+	if prov != nil {
+		uri = fmt.Sprintf("%s/screen/taier/app/getSpeedServiceByUserId?deviceId=%s&lon=%s&lat=%s&userId=-10000&province=%s&operatorId=-1", apiPerceptionBaseUrl, deviceId, prov.Lon, prov.Lat, prov.Name)
 	} else {
 		uri = fmt.Sprintf("%s/screen/taier/ftp/encrypt/information?deviceId=%s", apiPerceptionBaseUrl, deviceId)
 		old = true
 	}
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
+	q := req.URL.Query()
+	req.URL.RawQuery = q.Encode()
 	if err != nil {
 		return nil, err
 	}
@@ -506,9 +513,9 @@ func getOneServer(ip string) ([]defs.Server, error) {
 	}
 	defer resp.Body.Close()
 
-	var serverT defs.ServerTmp
-	if err := json.Unmarshal(b, &serverT); err == nil {
-		return []defs.Server{{ID: serverT.ID, IP: serverT.IP, Port: serverT.Port, Name: serverT.Name}}, nil
+	var s defs.ServerTmp
+	if err := json.Unmarshal(b, &s); err == nil {
+		return []defs.Server{{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov}}, nil
 	} else {
 		return nil, err
 	}
@@ -564,6 +571,23 @@ func preprocessServers(servers []defs.Server, excludes, specific []int, filter b
 	return servers, nil
 }
 
+func getProvInfo(provinces []defs.ProvinceInfo, name string) *defs.ProvinceInfo {
+	var prov defs.ProvinceInfo
+
+	if name == "" {
+		return nil
+	}
+
+	for _, p := range provinces {
+		if p.Short == name || strings.Contains(p.Name, name) || strings.Contains(name, p.Short) {
+			prov = p
+			break
+		}
+	}
+
+	return &prov
+}
+
 func getIPInfo() (*defs.IPInfoResponse, error) {
 	var ipInfo defs.IPInfoResponse
 	var ispRaw []string
@@ -596,51 +620,12 @@ func getIPInfo() (*defs.IPInfoResponse, error) {
 			ipInfo.Country = ispRaw[0]
 			ipInfo.Region = ispRaw[1]
 			ipInfo.City = ispRaw[2]
-			ipInfo.Area = ispRaw[3]
+			ipInfo.District = ispRaw[3]
 			ipInfo.Isp = ispRaw[4]
 		}
 	}
 
 	return &ipInfo, nil
-}
-
-func getIPInfoSPCN() (*defs.IPInfoResponse, error) {
-	req, err := http.NewRequest(http.MethodGet, apiGetIP, nil)
-	if err != nil {
-		log.Debugf("Failed when creating HTTP request: %s", err)
-		return nil, err
-	}
-	req.Header.Set("User-Agent", defs.UserAgentHW)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Debugf("Failed when making HTTP request: %s", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Debugf("Failed when reading HTTP response: %s", err)
-		return nil, err
-	}
-
-	if len(b) > 0 {
-		var res map[string]json.RawMessage
-		var ipinfo defs.IPInfoResponse
-		if err := json.Unmarshal(b, &res); err != nil {
-			return nil, err
-		}
-		if string(res["code"]) == "0" {
-			if err := json.Unmarshal(res["data"], &ipinfo); err == nil {
-				return &ipinfo, nil
-			}
-		} else {
-			log.Debugf("Failed to get IPInfo: %s", string(res["msg"]))
-		}
-	}
-
-	return nil, nil
 }
 
 // contains is a helper function to check if an int is in an int array

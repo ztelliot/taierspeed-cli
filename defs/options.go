@@ -6,7 +6,7 @@ const (
 	OptionNoUpload      = "no-upload"
 	OptionNoICMP        = "no-icmp"
 	OptionConcurrent    = "concurrent"
-	OptionConcurrentAlt = "c"
+	OptionConcurrentAlt = "n"
 	OptionBytes         = "bytes"
 	OptionMebiBytes     = "mebibytes"
 	OptionSimple        = "simple"
@@ -29,6 +29,6 @@ const (
 	OptionVersion       = "version"
 	OptionVersionAlt    = "v"
 	OptionDebug         = "debug"
-	OptionExperiment    = "exp"
+	OptionExperiment    = "experiment"
 	OptionExperimentAlt = "e"
 )

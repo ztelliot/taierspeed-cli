@@ -10,13 +10,19 @@ var (
 )
 
 type IPInfoResponse struct {
-	IP          string `json:"ip"`
-	Area        string `json:"district"`
-	City        string `json:"city"`
-	Region      string `json:"province"`
-	Country     string `json:"country"`
-	CountryCode string `json:"countryCode"`
-	Isp         string `json:"isp"`
-	Lon         string `json:"lon"`
-	Lat         string `json:"lat"`
+	IP       string
+	District string
+	City     string
+	Region   string
+	Country  string
+	Isp      string
+}
+
+type ProvinceInfo struct {
+	ID    int    `csv:"id"`
+	Code  string `csv:"code"`
+	Short string `csv:"short"`
+	Name  string `csv:"name"`
+	Lon   string `csv:"lon"`
+	Lat   string `csv:"lat"`
 }
