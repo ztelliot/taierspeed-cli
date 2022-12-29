@@ -99,13 +99,23 @@ func main() {
 				Aliases: []string{defs.OptionListAlt},
 				Usage:   "Display a list of TaierSpeed servers",
 			},
-			&cli.IntSliceFlag{
+			&cli.BoolFlag{
+				Name:  defs.OptionListProvinces,
+				Usage: "Display a list of provinces",
+			},
+			&cli.StringSliceFlag{
 				Name:    defs.OptionServer,
 				Aliases: []string{defs.OptionServerAlt},
 				Usage: "Specify a `SERVER` ID to test against. Can be supplied\n" +
 					"\tmultiple times. Cannot be used with --exclude",
 			},
-			&cli.IntSliceFlag{
+			&cli.StringSliceFlag{
+				Name:    defs.OptionProvince,
+				Aliases: []string{defs.OptionProvinceAlt},
+				Usage: "Specify a `PROVINCE` ID or Code to test against. Can be supplied\n" +
+					"\tmultiple times.",
+			},
+			&cli.StringSliceFlag{
 				Name: defs.OptionExclude,
 				Usage: "`EXCLUDE` a server from selection. Can be supplied\n" +
 					"\tmultiple times. Cannot be used with --server",
@@ -144,9 +154,14 @@ func main() {
 				Hidden:  true,
 			},
 			&cli.BoolFlag{
-				Name:    defs.OptionExperiment,
-				Aliases: []string{defs.OptionExperimentAlt},
-				Usage:   "Use experimental servers",
+				Name:    defs.OptionDisablePet,
+				Aliases: []string{defs.OptionDisablePetAlt},
+				Usage:   "Don't use experimental servers",
+			},
+			&cli.BoolFlag{
+				Name:    defs.OptionDisableTai,
+				Aliases: []string{defs.OptionDisableTaiAlt},
+				Usage:   "Don't use taierspeed servers",
 			},
 		},
 	}

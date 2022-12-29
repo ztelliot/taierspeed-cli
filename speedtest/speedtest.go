@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -251,143 +252,154 @@ func SpeedTest(c *cli.Context) error {
 
 	http.DefaultClient.Transport = transport
 
-	deviceId := ""
 	var ispInfo *defs.IPInfoResponse
 	// load server list
 	var servers []defs.Server
 	var err error
 	var provinces []defs.ProvinceInfo
-	var prov *defs.ProvinceInfo
+	var provs []defs.ProvinceInfo
 
 	if err := gocsv.UnmarshalBytes(ProvinceListByte, &provinces); err != nil {
 		log.Error("Failed to load province info")
 		return err
 	}
 
-	if c.Bool(defs.OptionExperiment) {
-		//deviceId, err = Register()
-		//if err != nil {
-		//	log.Errorf("Registry failed")
-		//	return err
-		//}
+	// if --list-prov is given, list all the provinces and exit
+	if c.Bool(defs.OptionListProvinces) {
+		for _, prov := range provinces {
+			fmt.Printf("%s: %s (%s)\n", prov.ID, prov.Short, prov.Code)
+		}
+		return nil
+	}
 
-		deviceId = defs.DeviceID
-
+	if !c.Bool(defs.OptionList) {
 		ispInfo, _ = getIPInfo()
+	}
 
+	if len(c.StringSlice(defs.OptionProvince)) > 0 {
+		op := c.StringSlice(defs.OptionProvince)
+		for _, p := range provinces {
+			if contains(op, p.ID) || contains(op, p.Code) {
+				provs = append(provs, p)
+			}
+		}
+	} else if !c.Bool(defs.OptionList) && len(c.StringSlice(defs.OptionServer)) <= 0 {
 		if ispInfo != nil {
 			if ispInfo.Country != "中国" {
-				prov = getProvInfo(provinces, "上海")
+				provs = append(provs, getProvInfo(provinces, ""))
 			} else {
-				prov = getProvInfo(provinces, ispInfo.Region)
+				provs = append(provs, getProvInfo(provinces, ispInfo.Region))
 			}
 		}
+	}
 
-		// fetch the server list JSON and parse it into the `servers` array
-		log.Infof("Retrieving server list")
+	// fetch the server list JSON and parse it into the `servers` array
+	log.Infof("Retrieving server list")
 
-		servers, err = getServerList(deviceId, prov, c.IntSlice(defs.OptionExclude), c.IntSlice(defs.OptionServer), !c.Bool(defs.OptionList), true)
+	var serversT []defs.ServerTmp
 
-		if err != nil {
-			log.Errorf("Error when fetching server list: %s", err)
-			return err
-		}
-	} else {
-		if c.Bool(defs.OptionList) || len(c.IntSlice(defs.OptionServer)) > 0 {
-			// fetch the server list JSON and parse it into the `servers` array
-			log.Infof("Parsing server list")
-
-			var serversT []defs.ServerTmp
-
-			if err := json.Unmarshal(ServerListByte, &serversT); err == nil {
-				for _, s := range serversT {
-					servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov})
+	if !c.Bool(defs.OptionDisableTai) {
+		if err := json.Unmarshal(ServerListByte, &serversT); err == nil {
+			for _, s := range serversT {
+				if len(provs) <= 0 || checkProv(provs, s.Prov) {
+					servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, Perception: false})
 				}
-				servers, err = preprocessServers(servers, c.IntSlice(defs.OptionExclude), c.IntSlice(defs.OptionServer), !c.Bool(defs.OptionList), false)
 			}
-			if err != nil {
-				log.Errorf("Error when parsing server list: %s", err)
-				return err
-			}
+			servers, err = preprocessServers(servers, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList), false)
 		}
+	}
 
-		if !c.Bool(defs.OptionList) {
-			ispInfo, _ = getIPInfo()
+	var serversP []defs.Server
+	var serversPT []defs.Server
+
+	if !c.Bool(defs.OptionDisablePet) {
+		if len(provs) <= 0 {
+			serversP, err = getServerList(defs.DeviceID, nil)
+		} else {
+			for _, s := range provs {
+				serversPT, err = getServerList(defs.DeviceID, &s)
+				serversP = append(serversP, serversPT...)
+			}
 		}
+		serversP, err = preprocessServers(serversP, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList), true)
+		servers = append(servers, serversP...)
+	}
+
+	if len(servers) == 0 {
+		err = errors.New("specified server(s) not found")
+	}
+
+	if err != nil {
+		log.Errorf("Error when parsing server list: %s", err)
+		return err
 	}
 
 	// if --list is given, list all the servers fetched and exit
 	if c.Bool(defs.OptionList) {
 		for _, svr := range servers {
-			fmt.Printf("%d: %s (%s)\n", svr.ID, svr.Name, svr.IP)
+			if svr.Perception {
+				fmt.Printf("E%d: %s (%s)\n", svr.ID, svr.Name, svr.City)
+			} else {
+				fmt.Printf("%d: %s (%s)\n", svr.ID, svr.Name, svr.IP)
+			}
 		}
 		return nil
 	}
 
 	// if --server is given, do speed tests with all of them
-	if len(c.IntSlice(defs.OptionServer)) > 0 {
+	if len(c.StringSlice(defs.OptionServer)) > 0 {
 		return doSpeedTest(c, servers, silent, ispInfo)
 	} else {
-		if c.Bool(defs.OptionExperiment) {
-			// else select the fastest server from the list
-			log.Info("Selecting the fastest server based on ping")
+		// else select the fastest server from the list
+		log.Info("Selecting the fastest server based on ping")
 
-			var wg sync.WaitGroup
-			jobs := make(chan PingJob, len(servers))
-			results := make(chan PingResult, len(servers))
-			done := make(chan struct{})
+		var wg sync.WaitGroup
+		jobs := make(chan PingJob, len(servers))
+		results := make(chan PingResult, len(servers))
+		done := make(chan struct{})
 
-			pingList := make(map[int]float64)
+		pingList := make(map[int]float64)
 
-			// spawn 10 concurrent pingers
-			for i := 0; i < 10; i++ {
-				go pingWorker(jobs, results, &wg, c.String(defs.OptionSource), c.Bool(defs.OptionNoICMP))
-			}
+		// spawn 10 concurrent pingers
+		for i := 0; i < 10; i++ {
+			go pingWorker(jobs, results, &wg, c.String(defs.OptionSource), c.Bool(defs.OptionNoICMP))
+		}
 
-			// send ping jobs to workers
-			for idx, server := range servers {
-				wg.Add(1)
-				jobs <- PingJob{Index: idx, Server: server}
-			}
+		// send ping jobs to workers
+		for idx, server := range servers {
+			wg.Add(1)
+			jobs <- PingJob{Index: idx, Server: server}
+		}
 
-			go func() {
-				wg.Wait()
-				close(done)
-			}()
+		go func() {
+			wg.Wait()
+			close(done)
+		}()
 
-		Loop:
-			for {
-				select {
-				case result := <-results:
-					pingList[result.Index] = result.Ping
-				case <-done:
-					break Loop
-				}
-			}
-
-			if len(pingList) == 0 {
-				log.Fatal("No server is currently available, please try again later.")
-			}
-
-			// get the fastest server's index in the `servers` array
-			var serverIdx int
-			for idx, ping := range pingList {
-				if ping > 0 && ping <= pingList[serverIdx] {
-					serverIdx = idx
-				}
-			}
-
-			// do speed test on the server
-			return doSpeedTest(c, []defs.Server{servers[serverIdx]}, silent, ispInfo)
-		} else {
-			if ispInfo != nil {
-				servers, err = getOneServer(ispInfo.IP)
-				return doSpeedTest(c, servers, silent, ispInfo)
-			} else {
-				log.Fatal("Get IP info failed")
-				return nil
+	Loop:
+		for {
+			select {
+			case result := <-results:
+				pingList[result.Index] = result.Ping
+			case <-done:
+				break Loop
 			}
 		}
+
+		if len(pingList) == 0 {
+			log.Fatal("No server is currently available, please try again later.")
+		}
+
+		// get the fastest server's index in the `servers` array
+		var serverIdx int
+		for idx, ping := range pingList {
+			if ping > 0 && ping <= pingList[serverIdx] {
+				serverIdx = idx
+			}
+		}
+
+		// do speed test on the server
+		return doSpeedTest(c, []defs.Server{servers[serverIdx]}, silent, ispInfo)
 	}
 }
 
@@ -419,14 +431,10 @@ func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGro
 }
 
 // getServerList fetches the server JSON from a remote server
-func getServerList(deviceId string, prov *defs.ProvinceInfo, excludes, specific []int, filter bool, perception bool) ([]defs.Server, error) {
-	// --exclude and --server cannot be used at the same time
-	if len(excludes) > 0 && len(specific) > 0 {
-		return nil, errors.New("either --exclude or --server can be used")
-	}
-
+func getServerList(deviceId string, prov *defs.ProvinceInfo) ([]defs.Server, error) {
 	// getting the server list from remote
 	var servers []defs.Server
+	var serversFiltered []defs.Server
 	old := false
 
 	uri := ""
@@ -491,7 +499,16 @@ func getServerList(deviceId string, prov *defs.ProvinceInfo, excludes, specific 
 		}
 	}
 
-	return preprocessServers(servers, excludes, specific, filter, perception)
+	if prov != nil {
+		for _, s := range servers {
+			if checkProv([]defs.ProvinceInfo{*prov}, s.Province) {
+				serversFiltered = append(serversFiltered, s)
+			}
+		}
+		return serversFiltered, nil
+	}
+
+	return servers, nil
 }
 
 func getOneServer(ip string) ([]defs.Server, error) {
@@ -522,7 +539,7 @@ func getOneServer(ip string) ([]defs.Server, error) {
 }
 
 // preprocessServers makes some needed modifications to the servers fetched
-func preprocessServers(servers []defs.Server, excludes, specific []int, filter bool, perception bool) ([]defs.Server, error) {
+func preprocessServers(servers []defs.Server, excludes, specific []string, filter bool, perception bool) ([]defs.Server, error) {
 	if len(excludes) > 0 && len(specific) > 0 {
 		return nil, errors.New("either --exclude or --specific can be used")
 	}
@@ -532,7 +549,11 @@ func preprocessServers(servers []defs.Server, excludes, specific []int, filter b
 		if len(excludes) > 0 {
 			var ret []defs.Server
 			for _, server := range servers {
-				if contains(excludes, server.ID) {
+				s := strconv.Itoa(server.ID)
+				if perception {
+					s = fmt.Sprintf("E%d", server.ID)
+				}
+				if contains(excludes, s) {
 					continue
 				}
 				server.Perception = perception
@@ -543,49 +564,51 @@ func preprocessServers(servers []defs.Server, excludes, specific []int, filter b
 
 		// use only servers from --server
 		// special value -1 will test all servers
-		if len(specific) > 0 && !contains(specific, -1) {
+		if len(specific) > 0 && !contains(specific, "-1") {
 			var ret []defs.Server
 			for _, server := range servers {
-				if contains(specific, server.ID) {
+				s := strconv.Itoa(server.ID)
+				if perception {
+					s = fmt.Sprintf("E%d", server.ID)
+				}
+				if contains(specific, s) {
 					server.Perception = perception
 					ret = append(ret, server)
 				}
 			}
-			if len(ret) == 0 {
-				error_message := fmt.Sprintf("specified server(s) not found: %v", specific)
-				return nil, errors.New(error_message)
-			}
 			return ret, nil
 		}
+	}
 
-		if perception {
-			var ret []defs.Server
-			for _, server := range servers {
-				server.Perception = perception
-				ret = append(ret, server)
-			}
-			return ret, nil
+	if perception {
+		var ret []defs.Server
+		for _, server := range servers {
+			server.Perception = perception
+			ret = append(ret, server)
 		}
+		return ret, nil
 	}
 
 	return servers, nil
 }
 
-func getProvInfo(provinces []defs.ProvinceInfo, name string) *defs.ProvinceInfo {
+func getProvInfo(provinces []defs.ProvinceInfo, name string) defs.ProvinceInfo {
 	var prov defs.ProvinceInfo
 
-	if name == "" {
-		return nil
-	}
-
-	for _, p := range provinces {
-		if p.Short == name || strings.Contains(p.Name, name) || strings.Contains(name, p.Short) {
-			prov = p
-			break
+	if name != "" {
+		for _, p := range provinces {
+			if p.Short == name || strings.Contains(p.Name, name) || strings.Contains(name, p.Short) {
+				prov = p
+				break
+			}
 		}
 	}
 
-	return &prov
+	if prov.ID != "" {
+		return prov
+	} else {
+		return defs.ProvinceInfo{ID: "31", Code: "sh", Short: "上海", Name: "上海市", Lon: "121.473667", Lat: "31.230525"}
+	}
 }
 
 func getIPInfo() (*defs.IPInfoResponse, error) {
@@ -628,10 +651,19 @@ func getIPInfo() (*defs.IPInfoResponse, error) {
 	return &ipInfo, nil
 }
 
-// contains is a helper function to check if an int is in an int array
-func contains(arr []int, val int) bool {
+// contains is a helper function to check if a string is in a string array
+func contains(arr []string, val string) bool {
 	for _, v := range arr {
 		if v == val {
+			return true
+		}
+	}
+	return false
+}
+
+func checkProv(arr []defs.ProvinceInfo, val string) bool {
+	for _, v := range arr {
+		if v.Short == val || v.Name == val {
 			return true
 		}
 	}

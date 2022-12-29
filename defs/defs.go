@@ -19,7 +19,7 @@ type IPInfoResponse struct {
 }
 
 type ProvinceInfo struct {
-	ID    int    `csv:"id"`
+	ID    string `csv:"id"`
 	Code  string `csv:"code"`
 	Short string `csv:"short"`
 	Name  string `csv:"name"`
