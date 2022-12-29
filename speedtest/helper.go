@@ -97,7 +97,7 @@ func deQueue(s defs.Server, key string) bool {
 }
 
 // doSpeedTest is where the actual speed test happens
-func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *defs.IPInfoResponse) error {
+func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent bool, ispInfo *defs.IPInfoResponse) error {
 	if !silent || c.Bool(defs.OptionSimple) {
 		if serverCount := len(servers); serverCount > 1 {
 			fmt.Printf("Testing against %d servers\n", serverCount)
@@ -138,7 +138,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *de
 			// skip ICMP if option given
 			currentServer.NoICMP = c.Bool(defs.OptionNoICMP)
 
-			p, jitter, err := currentServer.ICMPPingAndJitter(pingCount, c.String(defs.OptionSource))
+			p, jitter, err := currentServer.ICMPPingAndJitter(pingCount, c.String(defs.OptionSource), network)
 			if err != nil {
 				log.Errorf("Failed to get ping and jitter: %s", err)
 				return err
@@ -245,7 +245,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, silent bool, ispInfo *de
 				reps_json = append(reps_json, rep)
 			}
 		} else {
-			log.Infof("Selected server %s (%s) is not responding at the moment, try again later", currentServer.Name, currentServer.ID)
+			log.Infof("Selected server %s (%d) is not responding at the moment, try again later", currentServer.Name, currentServer.ID)
 		}
 
 		//add a new line after each test if testing multiple servers

@@ -84,7 +84,7 @@ func (s *Server) IsUp() bool {
 }
 
 // ICMPPingAndJitter pings the server via ICMP echos and calculate the average ping and jitter
-func (s *Server) ICMPPingAndJitter(count int, srcIp string) (float64, float64, error) {
+func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, float64, error) {
 	if s.NoICMP {
 		log.Debugf("Skipping ICMP for server %s, will use HTTP ping", s.Name)
 		return s.PingAndJitter(count + 2)
@@ -104,6 +104,7 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp string) (float64, float64, e
 	}
 
 	p, err := ping.NewPinger(target)
+	p.SetNetwork(network)
 	if err != nil {
 		log.Debugf("ICMP ping failed: %s, will use HTTP ping", err)
 		return s.PingAndJitter(count + 2)

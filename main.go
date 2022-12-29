@@ -40,6 +40,16 @@ func main() {
 				Usage:   "Show the version number and exit",
 			},
 			&cli.BoolFlag{
+				Name:    defs.OptionIPv4,
+				Aliases: []string{defs.OptionIPv4Alt},
+				Usage:   "Force IPv4 only, will not obey when fetch servers list",
+			},
+			&cli.BoolFlag{
+				Name:    defs.OptionIPv6,
+				Aliases: []string{defs.OptionIPv6Alt},
+				Usage:   "Force IPv6 only, will not obey when fetch servers list",
+			},
+			&cli.BoolFlag{
 				Name:  defs.OptionNoDownload,
 				Usage: "Do not perform download test",
 			},
@@ -122,7 +132,7 @@ func main() {
 			},
 			&cli.StringFlag{
 				Name:  defs.OptionSource,
-				Usage: "`SOURCE` IP address to bind to",
+				Usage: "`SOURCE` IP address to bind to, will not obey when fetch servers list",
 			},
 			&cli.IntFlag{
 				Name:  defs.OptionTimeout,
