@@ -265,6 +265,11 @@ func SpeedTest(c *cli.Context) error {
 				provs = append(provs, p)
 			}
 		}
+		if len(provs) == 0 {
+			err = errors.New("specified province(s) not found")
+			log.Errorf("Error when parsing server list: %s", err)
+			return err
+		}
 	} else if !c.Bool(defs.OptionList) && len(c.StringSlice(defs.OptionServer)) <= 0 {
 		if ispInfo != nil {
 			if ispInfo.Country != "中国" {

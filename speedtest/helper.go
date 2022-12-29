@@ -120,7 +120,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent b
 		if !silent || c.Bool(defs.OptionSimple) {
 			if currentServer.Perception {
 				line := strings.Split(currentServer.City, "-")
-				fmt.Printf("Server:\t\t%s - %s [%s] (id = %d)\n", currentServer.Name, line[len(line)-1], currentServer.IP, currentServer.ID)
+				fmt.Printf("Server:\t\t%s - %s [%s] (id = E%d)\n", currentServer.Name, line[len(line)-1], currentServer.IP, currentServer.ID)
 			} else {
 				fmt.Printf("Server:\t\t%s [%s] (id = %d)\n", currentServer.Name, currentServer.IP, currentServer.ID)
 			}
