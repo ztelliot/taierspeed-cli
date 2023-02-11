@@ -48,29 +48,14 @@ type PingResult struct {
 	Ping  float64
 }
 
-func GetRandom(tp string) string {
-	str := ""
-	prefix := ""
-	l := 0
-	if tp == "DeviceID" {
-		str = "0123456789abcdef"
-		l = 16
-	} else if tp == "IMEI" {
-		str = "0123456789ABCDEF"
-		prefix = "TS"
-		l = 16
-	} else {
-		str = "0123456789"
-		prefix = "taier"
-		l = 6
-	}
-	bs := []byte(str)
+func GetRandom(tok, pre string, l int) string {
+	bs := []byte(tok)
 	var res []byte
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 0; i < l; i++ {
 		res = append(res, bs[r.Intn(len(bs))])
 	}
-	return prefix + string(res)
+	return pre + string(res)
 }
 
 func Encrypt(src, key string) string {
@@ -132,8 +117,8 @@ func PKCS5UnPadding(origData []byte) []byte {
 }
 
 func Register() (string, error) {
-	did := GetRandom("DeviceID")
-	key := GetRandom("")
+	did := GetRandom("0123456789abcdef", "", 16)
+	key := GetRandom("0123456789", "taier", 6)
 	pl := Encrypt(fmt.Sprintf("{\"deviceId\": \"%s\"}", did), key[:8])
 	uri := fmt.Sprintf("%s/screen/taier/app/equipment/info?deviceId=%s&key=%s&json=%s", apiPerceptionBaseUrl, did, key, pl)
 
@@ -258,6 +243,8 @@ func SpeedTest(c *cli.Context) error {
 		ispInfo, _ = getIPInfo()
 	}
 
+	var isCN = false
+
 	if len(c.StringSlice(defs.OptionProvince)) > 0 {
 		op := c.StringSlice(defs.OptionProvince)
 		for _, p := range provinces {
@@ -275,6 +262,7 @@ func SpeedTest(c *cli.Context) error {
 			if ispInfo.Country != "中国" {
 				provs = append(provs, getProvInfo(provinces, ""))
 			} else {
+				isCN = true
 				provs = append(provs, getProvInfo(provinces, ispInfo.Region))
 			}
 		}
@@ -286,13 +274,17 @@ func SpeedTest(c *cli.Context) error {
 	var serversT []defs.ServerTmp
 
 	if !c.Bool(defs.OptionDisableTai) && !forceIPv6 {
-		if err := json.Unmarshal(ServerListByte, &serversT); err == nil {
-			for _, s := range serversT {
-				if len(provs) <= 0 || checkProv(provs, s.Prov) {
-					servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, Perception: false})
+		if isCN {
+			servers, err = getOneServer(ispInfo.IP)
+		} else {
+			if err := json.Unmarshal(ServerListByte, &serversT); err == nil {
+				for _, s := range serversT {
+					if len(provs) <= 0 || checkProv(provs, s.Prov) {
+						servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, City: s.City, Perception: false})
+					}
 				}
+				servers, err = preprocessServers(servers, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList), false)
 			}
-			servers, err = preprocessServers(servers, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList), false)
 		}
 	}
 
@@ -584,7 +576,7 @@ func getOneServer(ip string) ([]defs.Server, error) {
 
 	var s defs.ServerTmp
 	if err := json.Unmarshal(b, &s); err == nil {
-		return []defs.Server{{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov}}, nil
+		return []defs.Server{{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, City: s.City}}, nil
 	} else {
 		return nil, err
 	}
@@ -715,7 +707,7 @@ func contains(arr []string, val string) bool {
 
 func checkProv(arr []defs.ProvinceInfo, val string) bool {
 	for _, v := range arr {
-		if v.Short == val || v.Name == val {
+		if v.Short == val || v.Name == val || strings.Contains(val, v.Short) {
 			return true
 		}
 	}

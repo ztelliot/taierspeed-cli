@@ -31,7 +31,7 @@ const (
 func enQueue(s defs.Server) string {
 	time.Local, _ = time.LoadLocation("Asia/Chongqing")
 	ts := strconv.Itoa(int(time.Now().Local().Unix()))
-	imei := GetRandom("IMEI")
+	imei := GetRandom("0123456789ABCDEF", "TS", 16)
 
 	md5Ctx := md5.New()
 	md5Ctx.Write([]byte(fmt.Sprintf("model=Android&imei=%s&stime=%s", imei, ts)))
