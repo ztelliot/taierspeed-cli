@@ -258,13 +258,11 @@ func SpeedTest(c *cli.Context) error {
 			return err
 		}
 	} else if !c.Bool(defs.OptionList) && len(c.StringSlice(defs.OptionServer)) <= 0 {
-		if ispInfo != nil {
-			if ispInfo.Country != "中国" {
-				provs = append(provs, getProvInfo(provinces, ""))
-			} else {
-				isCN = true
-				provs = append(provs, getProvInfo(provinces, ispInfo.Region))
-			}
+		if ispInfo != nil && ispInfo.Country == "中国" {
+			isCN = true
+			provs = append(provs, getProvInfo(provinces, ispInfo.Region))
+		} else {
+			provs = append(provs, getProvInfo(provinces, ""))
 		}
 	}
 
@@ -291,7 +289,7 @@ func SpeedTest(c *cli.Context) error {
 	var serversP []defs.Server
 	var serversPT []defs.Server
 
-	if !c.Bool(defs.OptionDisablePet) {
+	if !c.Bool(defs.OptionDisablePet) && !(isCN && len(servers) > 0) {
 		if len(provs) <= 0 {
 			serversP, err = getServerList(defs.DeviceID, nil)
 		} else {
@@ -391,7 +389,7 @@ func SpeedTest(c *cli.Context) error {
 	http.DefaultClient.Transport = transport
 
 	// if --server is given, do speed tests with all of them
-	if len(c.StringSlice(defs.OptionServer)) > 0 {
+	if len(c.StringSlice(defs.OptionServer)) > 0 || len(servers) == 1 {
 		return doSpeedTest(c, servers, network, silent, ispInfo)
 	} else {
 		// else select the fastest server from the list
