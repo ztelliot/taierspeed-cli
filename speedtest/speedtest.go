@@ -13,7 +13,9 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,6 +33,8 @@ const (
 	apiBaseUrl           = `https://dlc.cnspeedtest.com`
 	apiPerceptionBaseUrl = `http://ux.caict.ac.cn`
 )
+
+var DomainRe = regexp.MustCompile(`([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.)+([a-zA-Z][-a-zA-Z]{0,62})`)
 
 //go:embed serverlist.json
 var ServerListByte []byte
@@ -281,7 +285,7 @@ func SpeedTest(c *cli.Context) error {
 						servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, City: s.City, Perception: false})
 					}
 				}
-				servers, err = preprocessServers(servers, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList), false)
+				servers, err = preprocessServers(servers, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList), false, false)
 			}
 		}
 	}
@@ -291,14 +295,14 @@ func SpeedTest(c *cli.Context) error {
 
 	if !c.Bool(defs.OptionDisablePet) && !(isCN && len(servers) > 0) {
 		if len(provs) <= 0 {
-			serversP, err = getServerList(defs.DeviceID, nil)
+			serversP, err = getServerList(defs.DeviceID, nil, false)
 		} else {
 			for _, s := range provs {
-				serversPT, err = getServerList(defs.DeviceID, &s)
+				serversPT, err = getServerList(defs.DeviceID, &s, !forceIPv6)
 				serversP = append(serversP, serversPT...)
 			}
 		}
-		serversP, err = preprocessServers(serversP, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList), true)
+		serversP, err = preprocessServers(serversP, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList), true, forceIPv6)
 		servers = append(servers, serversP...)
 	}
 
@@ -473,7 +477,7 @@ func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGro
 }
 
 // getServerList fetches the server JSON from a remote server
-func getServerList(deviceId string, prov *defs.ProvinceInfo) ([]defs.Server, error) {
+func getServerList(deviceId string, prov *defs.ProvinceInfo, filter bool) ([]defs.Server, error) {
 	// getting the server list from remote
 	var servers []defs.Server
 	var serversFiltered []defs.Server
@@ -541,7 +545,7 @@ func getServerList(deviceId string, prov *defs.ProvinceInfo) ([]defs.Server, err
 		}
 	}
 
-	if prov != nil {
+	if prov != nil && filter {
 		for _, s := range servers {
 			if checkProv([]defs.ProvinceInfo{*prov}, s.Province) {
 				serversFiltered = append(serversFiltered, s)
@@ -581,7 +585,7 @@ func getOneServer(ip string) ([]defs.Server, error) {
 }
 
 // preprocessServers makes some needed modifications to the servers fetched
-func preprocessServers(servers []defs.Server, excludes, specific []string, filter bool, perception bool) ([]defs.Server, error) {
+func preprocessServers(servers []defs.Server, excludes, specific []string, filter bool, perception bool, forceIPv6 bool) ([]defs.Server, error) {
 	if len(excludes) > 0 && len(specific) > 0 {
 		return nil, errors.New("either --exclude or --specific can be used")
 	}
@@ -625,6 +629,35 @@ func preprocessServers(servers []defs.Server, excludes, specific []string, filte
 	if perception {
 		var ret []defs.Server
 		for _, server := range servers {
+			if forceIPv6 {
+				pingUrl, err := url.Parse(server.PingURL)
+				if err != nil {
+					continue
+				} else {
+					host := pingUrl.Host
+					if strings.Contains(host, ":") {
+						host = strings.Split(host, ":")[0]
+					}
+					if !DomainRe.MatchString(host) {
+						continue
+					} else {
+						records, err := net.LookupHost(host)
+						if err != nil {
+							continue
+						} else {
+							hasIPv6 := false
+							for _, ip := range records {
+								if strings.Contains(ip, ":") {
+									hasIPv6 = true
+								}
+							}
+							if !hasIPv6 {
+								continue
+							}
+						}
+					}
+				}
+			}
 			server.Perception = perception
 			ret = append(ret, server)
 		}
