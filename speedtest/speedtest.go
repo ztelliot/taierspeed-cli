@@ -646,14 +646,18 @@ func preprocessServers(servers []defs.Server, excludes, specific []string, filte
 							continue
 						} else {
 							hasIPv6 := false
-							for _, ip := range records {
-								if strings.Contains(ip, ":") {
+							ip := server.IP
+							for _, i := range records {
+								if strings.Contains(i, ":") {
 									hasIPv6 = true
+									ip = i
+									break
 								}
 							}
 							if !hasIPv6 {
 								continue
 							}
+							server.IP = ip
 						}
 					}
 				}
