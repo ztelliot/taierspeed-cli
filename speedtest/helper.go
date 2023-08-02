@@ -154,7 +154,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent b
 			token := ""
 			if !currentServer.Perception {
 				token = enQueue(currentServer)
-				if len(token) <= 0 {
+				if len(token) <= 0 || token == "-" {
 					log.Errorf("Get token failed")
 					return nil
 				}

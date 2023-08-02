@@ -246,6 +246,8 @@ func (s *Server) Download(silent bool, useBytes, useMebi bool, requests int, dur
 	req.Header.Set("User-Agent", ua)
 	if s.HwType == 1 {
 		req.Host = s.HwDownloadHeaders
+	} else {
+		req.Host = s.IP
 	}
 
 	downloadDone := make(chan struct{}, requests)
