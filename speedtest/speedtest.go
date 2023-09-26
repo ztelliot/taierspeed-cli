@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	apiBaseUrl           = `https://dlc.cnspeedtest.com`
+	apiBaseUrl           = `http://dlc.cnspeedtest.com`
 	apiPerceptionBaseUrl = `http://ux.caict.ac.cn`
 )
 
