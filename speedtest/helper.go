@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"net/http"
 	"os"
@@ -53,9 +53,14 @@ func enQueue(s defs.Server) string {
 	}
 	defer resp.Body.Close()
 
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Debugf("Failed when reading HTTP response: %s", err)
+		return ""
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Debugf("Failed with %d: %s", resp.StatusCode, b)
 		return ""
 	}
 
@@ -69,11 +74,13 @@ func enQueue(s defs.Server) string {
 func deQueue(s defs.Server, key string) bool {
 	url := fmt.Sprintf("http://%s:%s/speed/dovalid?key=%s", s.IP, s.Port, key)
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequest(http.MethodPost, url, nil)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return false
 	}
+	req.Header.Set("Charset", "utf-8")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("User-Agent", defs.UserAgentTS)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -83,7 +90,7 @@ func deQueue(s defs.Server, key string) bool {
 	}
 	defer resp.Body.Close()
 
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Debugf("Failed when reading HTTP response: %s", err)
 		return false

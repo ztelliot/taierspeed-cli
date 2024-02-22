@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"net"
 	"net/http"
@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	apiBaseUrl           = `http://dlc.cnspeedtest.com`
+	apiBaseUrl           = `https://dlc.cnspeedtest.com:8043`
 	apiPerceptionBaseUrl = `http://ux.caict.ac.cn`
 )
 
@@ -140,7 +140,7 @@ func Register() (string, error) {
 	}
 	defer resp.Body.Close()
 
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Debugf("Failed when reading HTTP response: %s", err)
 		return "", err
@@ -273,11 +273,14 @@ func SpeedTest(c *cli.Context) error {
 	// fetch the server list JSON and parse it into the `servers` array
 	log.Infof("Retrieving server list")
 
-	var serversT []defs.ServerTmp
+	var serversT []defs.ServerTaier
 
 	if !c.Bool(defs.OptionDisableTai) && !forceIPv6 {
 		if isCN {
-			servers, err = getOneServer(ispInfo.IP)
+			serversT, err = getRecommendServers(ispInfo.IP)
+			for _, s := range serversT {
+				servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, City: s.City, Perception: false})
+			}
 		} else {
 			if err := json.Unmarshal(ServerListByte, &serversT); err == nil {
 				for _, s := range serversT {
@@ -491,8 +494,6 @@ func getServerList(deviceId string, prov *defs.ProvinceInfo, filter bool) ([]def
 		old = true
 	}
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
-	q := req.URL.Query()
-	req.URL.RawQuery = q.Encode()
 	if err != nil {
 		return nil, err
 	}
@@ -503,7 +504,7 @@ func getServerList(deviceId string, prov *defs.ProvinceInfo, filter bool) ([]def
 		return nil, err
 	}
 
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -557,8 +558,8 @@ func getServerList(deviceId string, prov *defs.ProvinceInfo, filter bool) ([]def
 	return servers, nil
 }
 
-func getOneServer(ip string) ([]defs.Server, error) {
-	uri := fmt.Sprintf("%s/dataServer/mobilematch.php?ip=%s&network=4", apiBaseUrl, ip)
+func getRecommendServers(ip string) ([]defs.ServerTaier, error) {
+	uri := fmt.Sprintf("%s/dataServer/mobilematch_list.php?ip=%s&network=4&ipv6=0", apiBaseUrl, ip)
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, err
@@ -570,15 +571,15 @@ func getOneServer(ip string) ([]defs.Server, error) {
 		return nil, err
 	}
 
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	var s defs.ServerTmp
+	var s []defs.ServerTaier
 	if err := json.Unmarshal(b, &s); err == nil {
-		return []defs.Server{{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, City: s.City}}, nil
+		return s, nil
 	} else {
 		return nil, err
 	}
@@ -709,7 +710,7 @@ func getIPInfo() (*defs.IPInfoResponse, error) {
 	}
 	defer resp.Body.Close()
 
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Debugf("Failed when reading HTTP response: %s", err)
 		return nil, err

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"net/http"
 	"net/url"
@@ -41,7 +40,7 @@ type Server struct {
 	Perception bool `json:"-"`
 }
 
-type ServerTmp struct {
+type ServerTaier struct {
 	ID   int    `json:"hostid,string"`
 	Name string `json:"hostname"`
 	IP   string `json:"hostip"`
@@ -187,7 +186,7 @@ func (s *Server) PingAndJitter(count int) (float64, float64, error) {
 			log.Debugf("Failed when making HTTP request: %s", err)
 			return 0, 0, err
 		}
-		io.Copy(ioutil.Discard, resp.Body)
+		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 		end := time.Now()
 
@@ -218,22 +217,21 @@ func (s *Server) PingAndJitter(count int) (float64, float64, error) {
 }
 
 // Download performs the actual download test
-func (s *Server) Download(silent bool, useBytes, useMebi bool, requests int, duration time.Duration, token string) (float64, int, error) {
+func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration time.Duration, token string) (float64, int, error) {
 	counter := NewCounter()
 	counter.SetMebi(useMebi)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	uri := ""
-	ua := ""
+	uri, ua := "", ""
 
 	if s.Perception {
 		uri = s.DownloadURL
 		ua = UserAgentHW
 	} else {
 		uri = fmt.Sprintf("http://%s:%s/speed/File(1G).dl?key=%s", s.IP, s.Port, token)
-		ua = UserAgentTS
+		ua = UserAgent
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
@@ -241,13 +239,13 @@ func (s *Server) Download(silent bool, useBytes, useMebi bool, requests int, dur
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
 	}
-	q := req.URL.Query()
-	req.URL.RawQuery = q.Encode()
+	if !s.Perception {
+		req.Header.Set("Accept", "*/*")
+		req.Header.Set("Connection", "close")
+	}
 	req.Header.Set("User-Agent", ua)
 	if s.HwType == 1 {
 		req.Host = s.HwDownloadHeaders
-	} else {
-		req.Host = s.IP
 	}
 
 	downloadDone := make(chan struct{}, requests)
@@ -259,7 +257,7 @@ func (s *Server) Download(silent bool, useBytes, useMebi bool, requests int, dur
 		} else {
 			defer resp.Body.Close()
 
-			if _, err = io.Copy(ioutil.Discard, io.TeeReader(resp.Body, counter)); err != nil {
+			if _, err = io.Copy(io.Discard, io.TeeReader(resp.Body, counter)); err != nil {
 				if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 					log.Debugf("Failed when reading HTTP response: %s", err)
 				}
@@ -312,7 +310,7 @@ Loop:
 }
 
 // Upload performs the actual upload test
-func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests int, uploadSize int, duration time.Duration, token string) (float64, int, error) {
+func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, uploadSize int, duration time.Duration, token string) (float64, int, error) {
 	counter := NewCounter()
 	counter.SetMebi(useMebi)
 	counter.SetUploadSize(uploadSize)
@@ -327,8 +325,7 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests int
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	uri := ""
-	ua := ""
+	uri, ua := "", ""
 
 	if s.Perception {
 		uri = s.UploadURL
@@ -349,7 +346,10 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests int
 	}
 
 	if !s.Perception {
+		req.Header.Set("Connection", "close")
+		req.Header.Set("Charset", "UTF-8")
 		req.Header.Set("Key", token)
+		req.Header.Set("Content-Type", "multipart/form-data;boundary=00content0boundary00")
 	}
 
 	uploadDone := make(chan struct{}, requests)
@@ -360,7 +360,7 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests int
 			log.Debugf("Failed when making HTTP request: %s", err)
 		} else if err == nil {
 			defer resp.Body.Close()
-			if _, err := io.Copy(ioutil.Discard, resp.Body); err != nil {
+			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 				log.Debugf("Failed when reading HTTP response: %s", err)
 			}
 
