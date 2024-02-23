@@ -224,14 +224,11 @@ func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	uri, ua := "", ""
-
+	uri := ""
 	if s.Perception {
 		uri = s.DownloadURL
-		ua = UserAgentHW
 	} else {
 		uri = fmt.Sprintf("http://%s:%s/speed/File(1G).dl?key=%s", s.IP, s.Port, token)
-		ua = UserAgent
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
@@ -239,13 +236,14 @@ func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
 	}
-	if !s.Perception {
-		req.Header.Set("Accept", "*/*")
-		req.Header.Set("Connection", "close")
-	}
-	req.Header.Set("User-Agent", ua)
+
 	if s.HwType == 1 {
 		req.Host = s.HwDownloadHeaders
+		req.Header.Set("User-Agent", UserAgentHW)
+	} else {
+		req.Header.Set("User-Agent", UserAgent)
+		req.Header.Set("Accept", "*/*")
+		req.Header.Set("Connection", "close")
 	}
 
 	downloadDone := make(chan struct{}, requests)
@@ -325,14 +323,11 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, up
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	uri, ua := "", ""
-
+	uri := ""
 	if s.Perception {
 		uri = s.UploadURL
-		ua = UserAgentHW
 	} else {
 		uri = fmt.Sprintf("http://%s:%s/speed/doAnalsLoad.do", s.IP, s.Port)
-		ua = UserAgentTS
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, counter)
@@ -340,12 +335,12 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, up
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
 	}
-	req.Header.Set("User-Agent", ua)
+
 	if s.HwType == 1 {
 		req.Host = s.HwUploadHeaders
-	}
-
-	if !s.Perception {
+		req.Header.Set("User-Agent", UserAgentHW)
+	} else {
+		req.Header.Set("User-Agent", UserAgentTS)
 		req.Header.Set("Connection", "close")
 		req.Header.Set("Charset", "UTF-8")
 		req.Header.Set("Key", token)

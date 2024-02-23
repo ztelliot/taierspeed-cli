@@ -494,6 +494,7 @@ func getServerList(deviceId string, prov *defs.ProvinceInfo, filter bool) ([]def
 		old = true
 	}
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
+	req.URL.RawQuery = req.URL.Query().Encode()
 	if err != nil {
 		return nil, err
 	}

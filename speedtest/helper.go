@@ -159,7 +159,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent b
 			}
 
 			token := ""
-			if !currentServer.Perception {
+			if !(currentServer.Perception || (c.Bool(defs.OptionNoDownload) && c.Bool(defs.OptionNoUpload))) {
 				token = enQueue(currentServer)
 				if len(token) <= 0 || token == "-" {
 					log.Errorf("Get token failed")
@@ -213,7 +213,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent b
 				bytesWritten = bw
 			}
 
-			if !currentServer.Perception {
+			if !(currentServer.Perception || (c.Bool(defs.OptionNoDownload) && c.Bool(defs.OptionNoUpload))) {
 				deQueue(currentServer, token)
 			}
 
