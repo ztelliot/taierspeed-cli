@@ -133,7 +133,7 @@ func main() {
 			&cli.StringFlag{
 				Name:    defs.OptionInterface,
 				Aliases: []string{defs.OptionInterfaceAlt},
-				Usage:   "Network `INTERFACE` to bind to, not available for Windows",
+				Usage:   "Network `INTERFACE` to bind to, only available for linux",
 			},
 			&cli.IntFlag{
 				Name:  defs.OptionTimeout,
