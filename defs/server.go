@@ -224,7 +224,7 @@ func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	uri := ""
+	var uri string
 	if s.Perception {
 		uri = s.DownloadURL
 	} else {
@@ -323,7 +323,7 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, up
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	uri := ""
+	var uri string
 	if s.Perception {
 		uri = s.UploadURL
 	} else {

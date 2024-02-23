@@ -31,7 +31,7 @@ import (
 
 const (
 	apiBaseUrl           = `https://dlc.cnspeedtest.com:8043`
-	apiPerceptionBaseUrl = `http://ux.caict.ac.cn`
+	apiPerceptionBaseUrl = `https://ux.caict.ac.cn`
 )
 
 var DomainRe = regexp.MustCompile(`([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.)+([a-zA-Z][-a-zA-Z]{0,62})`)
@@ -182,6 +182,10 @@ func SpeedTest(c *cli.Context) error {
 		return nil
 	}
 
+	if c.String(defs.OptionSource) != "" && c.String(defs.OptionInterface) != "" {
+		return fmt.Errorf("incompatible options '%s' and '%s'", defs.OptionSource, defs.OptionInterface)
+	}
+
 	// set CSV delimiter
 	gocsv.TagSeparator = c.String(defs.OptionCSVDelimiter)
 
@@ -203,25 +207,9 @@ func SpeedTest(c *cli.Context) error {
 
 	forceIPv4 := c.Bool(defs.OptionIPv4)
 	forceIPv6 := c.Bool(defs.OptionIPv6)
+	noICMP := c.Bool(defs.OptionNoICMP)
 
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-
-	// bind to source IP address if given
-	if src := c.String(defs.OptionSource); src != "" {
-		var dialContext func(context.Context, string, string) (net.Conn, error)
-		defaultDialer := &net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}
-
-		dialContext = defaultDialer.DialContext
-
-		// set default HTTP client's Transport to the one that binds the source address
-		// this is modified from http.DefaultTransport
-		transport.DialContext = dialContext
-	}
-
-	http.DefaultClient.Transport = transport
+	// TODO: change transport here
 
 	var ispInfo *defs.IPInfoResponse
 	// load server list
@@ -233,14 +221,6 @@ func SpeedTest(c *cli.Context) error {
 	if err := gocsv.UnmarshalBytes(ProvinceListByte, &provinces); err != nil {
 		log.Error("Failed to load province info")
 		return err
-	}
-
-	// if --list-prov is given, list all the provinces and exit
-	if c.Bool(defs.OptionListProvinces) {
-		for _, prov := range provinces {
-			fmt.Printf("%s: %s (%s)\n", prov.ID, prov.Short, prov.Code)
-		}
-		return nil
 	}
 
 	if !c.Bool(defs.OptionList) {
@@ -340,10 +320,10 @@ func SpeedTest(c *cli.Context) error {
 		network = "ip"
 	}
 
-	transport = http.DefaultTransport.(*http.Transport).Clone()
+	transport := http.DefaultTransport.(*http.Transport).Clone()
 
-	// bind to source IP address if given, or if ipv4/ipv6 is forced
-	if src := c.String(defs.OptionSource); src != "" || (forceIPv4 || forceIPv6) {
+	// bind to source IP address or interface if given, or if ipv4/ipv6 is forced
+	if src, iface := c.String(defs.OptionSource), c.String(defs.OptionInterface); src != "" || iface != "" || forceIPv4 || forceIPv6 {
 		var localTCPAddr *net.TCPAddr
 		if src != "" {
 			// first we parse the IP to see if it's valid
@@ -365,10 +345,17 @@ func SpeedTest(c *cli.Context) error {
 			localTCPAddr = &net.TCPAddr{IP: addr.IP}
 		}
 
+		var defaultDialer *net.Dialer
 		var dialContext func(context.Context, string, string) (net.Conn, error)
-		defaultDialer := &net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
+
+		if iface != "" {
+			defaultDialer = newInterfaceDialer(iface)
+			noICMP = true
+		} else {
+			defaultDialer = &net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}
 		}
 
 		if localTCPAddr != nil {
@@ -397,7 +384,7 @@ func SpeedTest(c *cli.Context) error {
 
 	// if --server is given, do speed tests with all of them
 	if len(c.StringSlice(defs.OptionServer)) > 0 || len(servers) == 1 {
-		return doSpeedTest(c, servers, network, silent, ispInfo)
+		return doSpeedTest(c, servers, network, silent, noICMP, ispInfo)
 	} else {
 		// else select the fastest server from the list
 		log.Info("Selecting the fastest server based on ping")
@@ -411,7 +398,7 @@ func SpeedTest(c *cli.Context) error {
 
 		// spawn 10 concurrent pingers
 		for i := 0; i < 10; i++ {
-			go pingWorker(jobs, results, &wg, c.String(defs.OptionSource), network, c.Bool(defs.OptionNoICMP))
+			go pingWorker(jobs, results, &wg, c.String(defs.OptionSource), network, noICMP)
 		}
 
 		// send ping jobs to workers
@@ -448,7 +435,7 @@ func SpeedTest(c *cli.Context) error {
 		}
 
 		// do speed test on the server
-		return doSpeedTest(c, []defs.Server{servers[serverIdx]}, network, silent, ispInfo)
+		return doSpeedTest(c, []defs.Server{servers[serverIdx]}, network, silent, noICMP, ispInfo)
 	}
 }
 
@@ -484,9 +471,9 @@ func getServerList(deviceId string, prov *defs.ProvinceInfo, filter bool) ([]def
 	// getting the server list from remote
 	var servers []defs.Server
 	var serversFiltered []defs.Server
+	var uri string
 	old := false
 
-	uri := ""
 	if prov != nil {
 		uri = fmt.Sprintf("%s/screen/taier/app/getSpeedServiceByUserId?deviceId=%s&lon=%s&lat=%s&userId=-10000&province=%s&operatorId=-1", apiPerceptionBaseUrl, deviceId, prov.Lon, prov.Lat, prov.Name)
 	} else {

@@ -109,10 +109,6 @@ func main() {
 				Aliases: []string{defs.OptionListAlt},
 				Usage:   "Display a list of TaierSpeed servers",
 			},
-			&cli.BoolFlag{
-				Name:  defs.OptionListProvinces,
-				Usage: "Display a list of provinces",
-			},
 			&cli.StringSliceFlag{
 				Name:    defs.OptionServer,
 				Aliases: []string{defs.OptionServerAlt},
@@ -133,6 +129,11 @@ func main() {
 			&cli.StringFlag{
 				Name:  defs.OptionSource,
 				Usage: "`SOURCE` IP address to bind to, will not obey when fetch servers list",
+			},
+			&cli.StringFlag{
+				Name:    defs.OptionInterface,
+				Aliases: []string{defs.OptionInterfaceAlt},
+				Usage:   "Network `INTERFACE` to bind to, not available for Windows",
 			},
 			&cli.IntFlag{
 				Name:  defs.OptionTimeout,
@@ -166,12 +167,12 @@ func main() {
 			&cli.BoolFlag{
 				Name:    defs.OptionDisablePet,
 				Aliases: []string{defs.OptionDisablePetAlt},
-				Usage:   "Don't use experimental servers",
+				Usage:   "Don't use taierspeed servers",
 			},
 			&cli.BoolFlag{
 				Name:    defs.OptionDisableTai,
 				Aliases: []string{defs.OptionDisableTaiAlt},
-				Usage:   "Don't use taierspeed servers",
+				Usage:   "Don't use globalspeed servers",
 			},
 		},
 	}
