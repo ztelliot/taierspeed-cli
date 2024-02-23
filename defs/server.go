@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/briandowns/spinner"
@@ -25,6 +26,7 @@ type Server struct {
 
 	Province string `json:"province"`
 	City     string `json:"city"`
+	ISP      string `json:"-"`
 
 	DownloadURL string `json:"http_downloadUrl"`
 	UploadURL   string `json:"http_uploadUrl"`
@@ -46,6 +48,15 @@ type ServerTaier struct {
 	Port string `json:"port"`
 	Prov string `json:"pname"`
 	City string `json:"city"`
+	ISP  string `json:"oper,omitempty"`
+}
+
+func (s *Server) ShowCity() string {
+	if strings.Contains(s.Province, s.City) {
+		return fmt.Sprintf("%s-%s", s.Province, s.ISP)
+	} else {
+		return fmt.Sprintf("%s-%s-%s", s.Province, s.City, s.ISP)
+	}
 }
 
 // IsUp checks the speed test backend is up by accessing the ping URL

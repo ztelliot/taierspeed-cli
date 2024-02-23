@@ -259,13 +259,13 @@ func SpeedTest(c *cli.Context) error {
 		if isCN {
 			serversT, err = getRecommendServers(ispInfo.IP)
 			for _, s := range serversT {
-				servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, City: s.City, Perception: false})
+				servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, City: s.City, ISP: s.ISP})
 			}
 		} else {
 			if err := json.Unmarshal(ServerListByte, &serversT); err == nil {
 				for _, s := range serversT {
 					if len(provs) <= 0 || checkProv(provs, s.Prov) {
-						servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, City: s.City, Perception: false})
+						servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, City: s.City, ISP: s.ISP})
 					}
 				}
 				servers, err = preprocessServers(servers, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList), false, false)
@@ -302,9 +302,9 @@ func SpeedTest(c *cli.Context) error {
 	if c.Bool(defs.OptionList) {
 		for _, svr := range servers {
 			if svr.Perception {
-				fmt.Printf("E%d: %s (%s)\n", svr.ID, svr.Name, svr.City)
+				fmt.Printf("T%d: %s (%s)\n", svr.ID, svr.Name, svr.City)
 			} else {
-				fmt.Printf("%d: %s (%s)\n", svr.ID, svr.Name, svr.IP)
+				fmt.Printf("%d: %s (%s)\n", svr.ID, svr.Name, svr.ShowCity())
 			}
 		}
 		return nil
@@ -586,7 +586,7 @@ func preprocessServers(servers []defs.Server, excludes, specific []string, filte
 			for _, server := range servers {
 				s := strconv.Itoa(server.ID)
 				if perception {
-					s = fmt.Sprintf("E%d", server.ID)
+					s = fmt.Sprintf("T%d", server.ID)
 				}
 				if contains(excludes, s) {
 					continue
@@ -604,7 +604,7 @@ func preprocessServers(servers []defs.Server, excludes, specific []string, filte
 			for _, server := range servers {
 				s := strconv.Itoa(server.ID)
 				if perception {
-					s = fmt.Sprintf("E%d", server.ID)
+					s = fmt.Sprintf("T%d", server.ID)
 				}
 				if contains(specific, s) {
 					server.Perception = perception
