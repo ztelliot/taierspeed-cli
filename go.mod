@@ -3,15 +3,15 @@ module github.com/ztelliot/taierspeed-cli
 go 1.16
 
 require (
-	github.com/briandowns/spinner v1.12.0
-	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
-	github.com/fatih/color v1.10.0 // indirect
-	github.com/go-ping/ping v0.0.0-20210407214646-e4e642a95741
-	github.com/gocarina/gocsv v0.0.0-20210408192840-02d7211d929d
-	github.com/russross/blackfriday/v2 v2.1.0 // indirect
-	github.com/sirupsen/logrus v1.8.1
-	github.com/stretchr/testify v1.3.0 // indirect
-	github.com/urfave/cli/v2 v2.3.0
-	golang.org/x/net v0.0.0-20210421230115-4e50805a0758 // indirect
-	golang.org/x/sys v0.0.0-20210421221651-33663a62ff08 // indirect
+	github.com/briandowns/spinner v1.23.0
+	github.com/cpuguy83/go-md2man/v2 v2.0.3 // indirect
+	github.com/fatih/color v1.16.0 // indirect
+	github.com/go-ping/ping v1.1.0
+	github.com/gocarina/gocsv v0.0.0-20231116093920-b87c2d0e983a
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/sirupsen/logrus v1.9.3
+	github.com/urfave/cli/v2 v2.27.1
+	github.com/xrash/smetrics v0.0.0-20231213231151-1d8dd44e695e // indirect
+	golang.org/x/net v0.21.0 // indirect
+	golang.org/x/sync v0.6.0 // indirect
 )
