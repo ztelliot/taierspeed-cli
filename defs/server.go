@@ -9,7 +9,6 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"runtime"
 	"time"
 
 	"github.com/briandowns/spinner"
@@ -51,14 +50,12 @@ type ServerTaier struct {
 
 // IsUp checks the speed test backend is up by accessing the ping URL
 func (s *Server) IsUp() bool {
-	target := ""
-	ua := ""
+	var target string
+
 	if s.Perception {
 		target = s.PingURL
-		ua = UserAgentHW
 	} else {
 		target = fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
-		ua = UserAgentTS
 	}
 
 	req, err := http.NewRequest(http.MethodGet, target, nil)
@@ -66,10 +63,12 @@ func (s *Server) IsUp() bool {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return false
 	}
-	req.Header.Set("User-Agent", ua)
 
 	if s.HwType == 1 {
 		req.Host = s.HwPingHeaders
+		req.Header.Set("User-Agent", UserAgentHW)
+	} else {
+		req.Header.Set("User-Agent", UserAgentTS)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -90,7 +89,7 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, f
 		return s.PingAndJitter(count + 2)
 	}
 
-	target := ""
+	var target string
 
 	if s.Perception {
 		u, err := url.Parse(s.PingURL)
@@ -104,16 +103,12 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, f
 	}
 
 	p, err := ping.NewPinger(target)
-	p.SetNetwork(network)
 	if err != nil {
 		log.Debugf("ICMP ping failed: %s, will use HTTP ping", err)
 		return s.PingAndJitter(count + 2)
 	}
-
-	if runtime.GOOS == "windows" {
-		p.SetPrivileged(true)
-	}
-
+	p.SetPrivileged(true)
+	p.SetNetwork(network)
 	p.Count = count
 	p.Timeout = time.Duration(count) * time.Second
 	if srcIp != "" {
@@ -156,15 +151,12 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, f
 
 // PingAndJitter pings the server via accessing ping URL and calculate the average ping and jitter
 func (s *Server) PingAndJitter(count int) (float64, float64, error) {
-	target := ""
-	ua := ""
+	var target string
 
 	if s.Perception {
 		target = s.PingURL
-		ua = UserAgentHW
 	} else {
 		target = fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
-		ua = UserAgentTS
 	}
 
 	var pings []float64
@@ -174,9 +166,11 @@ func (s *Server) PingAndJitter(count int) (float64, float64, error) {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
 	}
-	req.Header.Set("User-Agent", ua)
 	if s.HwType == 1 {
 		req.Host = s.HwPingHeaders
+		req.Header.Set("User-Agent", UserAgentHW)
+	} else {
+		req.Header.Set("User-Agent", UserAgentTS)
 	}
 
 	for i := 0; i < count; i++ {
@@ -188,9 +182,8 @@ func (s *Server) PingAndJitter(count int) (float64, float64, error) {
 		}
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
-		end := time.Now()
 
-		pings = append(pings, float64(end.Sub(start).Milliseconds()))
+		pings = append(pings, float64(time.Since(start).Milliseconds()))
 	}
 
 	// discard first result due to handshake overhead

@@ -65,7 +65,7 @@ func (c *BytesCounter) SetUploadSize(uploadSize int) {
 
 // AvgBytes returns the average bytes/second
 func (c *BytesCounter) AvgBytes() float64 {
-	return float64(c.total) / time.Now().Sub(c.start).Seconds()
+	return float64(c.total) / time.Since(c.start).Seconds()
 }
 
 // AvgMbps returns the average mbits/second
@@ -156,7 +156,7 @@ func (c *BytesCounter) Total() uint64 {
 
 // CurrentSpeed returns the current bytes/second
 func (c *BytesCounter) CurrentSpeed() float64 {
-	return float64(c.total) / time.Now().Sub(c.start).Seconds()
+	return float64(c.total) / time.Since(c.start).Seconds()
 }
 
 // SeekWrapper is a wrapper around io.Reader to give it a noop io.Seeker interface
