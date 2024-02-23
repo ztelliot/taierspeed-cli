@@ -217,7 +217,7 @@ func (s *Server) PingAndJitter(count int) (float64, float64, error) {
 }
 
 // Download performs the actual download test
-func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration time.Duration, token string) (float64, int, error) {
+func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration time.Duration, token string) (float64, uint64, error) {
 	counter := NewCounter()
 	counter.SetMebi(useMebi)
 
@@ -308,7 +308,7 @@ Loop:
 }
 
 // Upload performs the actual upload test
-func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, uploadSize int, duration time.Duration, token string) (float64, int, error) {
+func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, uploadSize int, duration time.Duration, token string) (float64, uint64, error) {
 	counter := NewCounter()
 	counter.SetMebi(useMebi)
 	counter.SetUploadSize(uploadSize)

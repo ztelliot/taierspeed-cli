@@ -119,8 +119,8 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent b
 		}
 	}
 
-	var reps_json []report.JSONReport
-	var reps_csv []report.CSVReport
+	var repsJson []report.JSONReport
+	var repsCsv []report.CSVReport
 
 	// fetch current user's IP info
 	for _, currentServer := range servers {
@@ -169,7 +169,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent b
 
 			// get download value
 			var downloadValue float64
-			var bytesRead int
+			var bytesRead uint64
 			if c.Bool(defs.OptionNoDownload) {
 				log.Info("Download test is disabled")
 			} else {
@@ -192,7 +192,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent b
 
 			// get upload value
 			var uploadValue float64
-			var bytesWritten int
+			var bytesWritten uint64
 			if c.Bool(defs.OptionNoUpload) {
 				log.Info("Upload test is disabled")
 			} else {
@@ -231,7 +231,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent b
 				rep.Upload = math.Round(uploadValue*100) / 100
 				rep.IP = ispInfo.IP
 
-				reps_csv = append(reps_csv, rep)
+				repsCsv = append(repsCsv, rep)
 			} else if c.Bool(defs.OptionJSON) {
 				// print json if --json is given
 				var rep report.JSONReport
@@ -249,7 +249,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent b
 
 				rep.Client = *ispInfo
 
-				reps_json = append(reps_json, rep)
+				repsJson = append(repsJson, rep)
 			}
 		} else {
 			log.Infof("Selected server %s (%d) is not responding at the moment, try again later", currentServer.Name, currentServer.ID)
@@ -264,13 +264,13 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent b
 	// check for --csv or --json. the program prioritize the --csv before the --json. this is the same behavior as speedtest-cli
 	if c.Bool(defs.OptionCSV) {
 		var buf bytes.Buffer
-		if err := gocsv.MarshalWithoutHeaders(&reps_csv, &buf); err != nil {
+		if err := gocsv.MarshalWithoutHeaders(&repsCsv, &buf); err != nil {
 			log.Errorf("Error generating CSV report: %s", err)
 		} else {
 			os.Stdout.WriteString(buf.String())
 		}
 	} else if c.Bool(defs.OptionJSON) {
-		if b, err := json.Marshal(&reps_json); err != nil {
+		if b, err := json.Marshal(&repsJson); err != nil {
 			log.Errorf("Error generating JSON report: %s", err)
 		} else {
 			os.Stdout.Write(b[:])
@@ -301,7 +301,7 @@ func humanizeMbps(mbps float64, useMebi bool) string {
 }
 
 // humanizeBytes returns the Bytes/KiloBytes/MegaBytes/GigaBytes (or Bytes/KibiBytes/MebiBytes/GibiBytes)
-func humanizeBytes(bytes int, useMebi bool) string {
+func humanizeBytes(bytes uint64, useMebi bool) string {
 	val := float64(bytes) / 8
 	var base float64 = 1000
 	if useMebi {
