@@ -586,6 +586,9 @@ func getPerceptionServerList(prov *defs.ProvinceInfo) ([]defs.Server, error) {
 
 	var serversResolved []defs.Server
 	for _, s := range servers {
+		if s.Type == 1 {
+			continue
+		}
 		s.Type = defs.Perception
 		if downloadUrl, err := url.Parse(s.DownloadURL); err == nil {
 			host := downloadUrl.Hostname()

@@ -86,7 +86,7 @@ type Server struct {
 	HwUploadHeaders   string `json:"hw_httpUlHeaders"`
 
 	NoICMP bool       `json:"-"`
-	Type   ServerType `json:"-"`
+	Type   ServerType `json:"protocol_type"`
 }
 
 func (s *Server) ShowCity() string {
