@@ -24,12 +24,12 @@ var (
 )
 
 type IPInfoResponse struct {
-	IP       string
-	District string
-	City     string
-	Region   string
-	Country  string
-	Isp      string
+	IP       string `json:"ip"`
+	District string `json:"district"`
+	City     string `json:"city"`
+	Region   string `json:"region"`
+	Country  string `json:"country"`
+	Isp      string `json:"isp"`
 }
 
 type ProvinceInfo struct {

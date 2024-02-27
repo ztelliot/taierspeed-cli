@@ -16,7 +16,6 @@ import (
 	"net/url"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -349,14 +348,7 @@ func SpeedTest(c *cli.Context) error {
 			if svr.IPv6 != "" {
 				stacks = append(stacks, "IPv6")
 			}
-			switch svr.Type {
-			case defs.Perception:
-				fmt.Printf("P%d: %s (%s) %v\n", svr.ID, svr.Name, svr.City, stacks)
-			case defs.WirelessSpeed:
-				fmt.Printf("W%d: %s (%s) %v\n", svr.ID, svr.Name, svr.ShowCity(), stacks)
-			default:
-				fmt.Printf("%d: %s (%s) %v\n", svr.ID, svr.Name, svr.ShowCity(), stacks)
-			}
+			fmt.Printf("%s: %s (%s) %v\n", svr.GetID(), svr.Name, svr.ShowCity(), stacks)
 		}
 		return nil
 	}
@@ -714,16 +706,7 @@ func preprocessServers(servers []defs.Server, excludes, specific []string, filte
 		if len(excludes) > 0 {
 			var ret []defs.Server
 			for _, server := range servers {
-				var s string
-				switch server.Type {
-				case defs.Perception:
-					s = fmt.Sprintf("P%d", server.ID)
-				case defs.WirelessSpeed:
-					s = fmt.Sprintf("W%d", server.ID)
-				default:
-					s = strconv.Itoa(server.ID)
-				}
-				if contains(excludes, s) {
+				if contains(excludes, server.GetID()) {
 					continue
 				}
 				ret = append(ret, server)
@@ -736,16 +719,7 @@ func preprocessServers(servers []defs.Server, excludes, specific []string, filte
 		if len(specific) > 0 && !contains(specific, "-1") {
 			var ret []defs.Server
 			for _, server := range servers {
-				var s string
-				switch server.Type {
-				case defs.Perception:
-					s = fmt.Sprintf("P%d", server.ID)
-				case defs.WirelessSpeed:
-					s = fmt.Sprintf("W%d", server.ID)
-				default:
-					s = strconv.Itoa(server.ID)
-				}
-				if contains(specific, s) {
+				if contains(specific, server.GetID()) {
 					ret = append(ret, server)
 				}
 			}

@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -89,11 +90,27 @@ type Server struct {
 	Type   ServerType `json:"protocol_type"`
 }
 
+func (s *Server) GetID() string {
+	switch s.Type {
+	case Perception:
+		return fmt.Sprintf("P%d", s.ID)
+	case WirelessSpeed:
+		return fmt.Sprintf("W%d", s.ID)
+	default:
+		return strconv.Itoa(s.ID)
+	}
+}
+
 func (s *Server) ShowCity() string {
-	if strings.Contains(s.Province, s.City) {
-		return fmt.Sprintf("%s-%s", s.Province, s.ISP)
-	} else {
-		return fmt.Sprintf("%s-%s-%s", s.Province, s.City, s.ISP)
+	switch s.Type {
+	case Perception:
+		return s.City
+	default:
+		if strings.Contains(s.Province, s.City) {
+			return fmt.Sprintf("%s-%s", s.Province, s.ISP)
+		} else {
+			return fmt.Sprintf("%s-%s-%s", s.Province, s.City, s.ISP)
+		}
 	}
 }
 

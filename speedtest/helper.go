@@ -128,20 +128,15 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 	// fetch current user's IP info
 	for _, currentServer := range servers {
 		if !silent || c.Bool(defs.OptionSimple) {
-			name, ip, id := currentServer.Name, currentServer.IP, strconv.Itoa(currentServer.ID)
-			switch currentServer.Type {
-			case defs.Perception:
+			name, ip := currentServer.Name, currentServer.IP
+			if currentServer.Type == defs.Perception {
 				line := strings.Split(currentServer.City, "-")
 				name = fmt.Sprintf("%s - %s", currentServer.Name, line[len(line)-1])
-				id = fmt.Sprintf("P%d", currentServer.ID)
-			case defs.WirelessSpeed:
-				id = fmt.Sprintf("W%d", currentServer.ID)
 			}
-			switch network {
-			case "ip6":
+			if network == "ip6" {
 				ip = currentServer.IPv6
 			}
-			fmt.Printf("Server:\t\t%s [%s] (id = %s)\n", name, ip, id)
+			fmt.Printf("Server:\t\t%s [%s] (id = %s)\n", name, ip, currentServer.GetID())
 		}
 
 		if currentServer.IsUp(network) {
@@ -255,15 +250,24 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 				rep.BytesReceived = bytesRead
 				rep.BytesSent = bytesWritten
 
+				rep.Server.ID = currentServer.GetID()
+				switch network {
+				case "ip6":
+					rep.Server.IP = currentServer.IPv6
+				default:
+					rep.Server.IP = currentServer.IP
+				}
 				rep.Server.Name = currentServer.Name
-				rep.Server.IP = currentServer.IP
+				rep.Server.Province = currentServer.Province
+				rep.Server.City = currentServer.City
+				rep.Server.ISP = currentServer.ISP
 
 				rep.Client = *ispInfo
 
 				repsJson = append(repsJson, rep)
 			}
 		} else {
-			log.Infof("Selected server %s (%d) is not responding at the moment, try again later", currentServer.Name, currentServer.ID)
+			log.Infof("Selected server %s (%s) is not responding at the moment, try again later", currentServer.Name, currentServer.GetID())
 		}
 
 		//add a new line after each test if testing multiple servers

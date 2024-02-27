@@ -20,6 +20,10 @@ type JSONReport struct {
 
 // Server represents the speed test server's information
 type Server struct {
-	Name string `json:"name"`
-	IP   string `json:"ip"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	IP       string `json:"ip"`
+	Province string `json:"province"`
+	City     string `json:"city"`
+	ISP      string `json:"isp"`
 }
