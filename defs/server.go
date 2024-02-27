@@ -17,17 +17,65 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type ServerGlobal struct {
+	ID   int    `json:"hostid,string"`
+	Name string `json:"hostname"`
+	IP   string `json:"hostip"`
+	Port string `json:"port"`
+	Prov string `json:"pname"`
+	City string `json:"city"`
+	ISP  string `json:"oper,omitempty"`
+}
+
+type ServerWireless struct {
+	ID     int    `json:"s_id"`
+	Name   string `json:"s_name"`
+	IP     string `json:"s_ip"`
+	IPv6   string `json:"s_ipv6"`
+	URL    string `json:"s_url"`
+	URLs   string `json:"s_url_https"`
+	URLv6  string `json:"s_url_ipv6"`
+	County string `json:"s_county"`
+	City   string `json:"s_city"`
+	Prov   string `json:"s_province"`
+	ISP    int    `json:"s_operator"`
+}
+
+func (s *ServerWireless) GetISP() string {
+	switch s.ISP {
+	case 1:
+		return "移动"
+	case 2:
+		return "联通"
+	case 3:
+		return "电信"
+	default:
+		return ""
+	}
+}
+
+type ServerType uint8
+
+const (
+	GlobalSpeed ServerType = iota
+	Perception
+	WirelessSpeed
+)
+
 // Server represents a speed test server
 type Server struct {
 	ID   int    `json:"id"`
 	Name string `json:"server_name"`
 	IP   string `json:"server_ip"`
+	IPv6 string `json:"-"`
 	Port string `json:"-"`
 
 	Province string `json:"province"`
 	City     string `json:"city"`
 	ISP      string `json:"-"`
 
+	URL         string `json:"-"`
+	URLv6       string `json:"-"`
 	DownloadURL string `json:"http_downloadUrl"`
 	UploadURL   string `json:"http_uploadUrl"`
 	PingURL     string `json:"ping_url"`
@@ -37,18 +85,8 @@ type Server struct {
 	HwDownloadHeaders string `json:"hw_httpDlHeaders"`
 	HwUploadHeaders   string `json:"hw_httpUlHeaders"`
 
-	NoICMP     bool `json:"-"`
-	Perception bool `json:"-"`
-}
-
-type ServerTaier struct {
-	ID   int    `json:"hostid,string"`
-	Name string `json:"hostname"`
-	IP   string `json:"hostip"`
-	Port string `json:"port"`
-	Prov string `json:"pname"`
-	City string `json:"city"`
-	ISP  string `json:"oper,omitempty"`
+	NoICMP bool       `json:"-"`
+	Type   ServerType `json:"-"`
 }
 
 func (s *Server) ShowCity() string {
@@ -60,12 +98,20 @@ func (s *Server) ShowCity() string {
 }
 
 // IsUp checks the speed test backend is up by accessing the ping URL
-func (s *Server) IsUp() bool {
+func (s *Server) IsUp(network string) bool {
 	var target string
 
-	if s.Perception {
+	switch s.Type {
+	case Perception:
 		target = s.PingURL
-	} else {
+	case WirelessSpeed:
+		switch network {
+		case "ip6":
+			target = s.URLv6
+		default:
+			target = s.URL
+		}
+	default:
 		target = fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
 	}
 
@@ -77,9 +123,9 @@ func (s *Server) IsUp() bool {
 
 	if s.HwType == 1 {
 		req.Host = s.HwPingHeaders
-		req.Header.Set("User-Agent", UserAgentHW)
+		req.Header.Set("User-Agent", GenexUA)
 	} else {
-		req.Header.Set("User-Agent", UserAgentTS)
+		req.Header.Set("User-Agent", AndroidUA)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -97,26 +143,38 @@ func (s *Server) IsUp() bool {
 func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, float64, error) {
 	if s.NoICMP {
 		log.Debugf("Skipping ICMP for server %s, will use HTTP ping", s.Name)
-		return s.PingAndJitter(count + 2)
+		return s.PingAndJitter(count+2, network)
 	}
 
 	var target string
 
-	if s.Perception {
-		u, err := url.Parse(s.PingURL)
-		if err != nil {
-			log.Debugf("Failed when parsing server URL: %s", err)
-			return 0, 0, err
+	switch s.Type {
+	case Perception:
+		if s.URL != "" {
+			target = s.URL
+		} else {
+			target = s.IP
 		}
-		target = u.Hostname()
-	} else {
+	case WirelessSpeed:
+		switch network {
+		case "ip6":
+			target = s.IPv6
+		default:
+			if u, err := url.Parse(s.URL); err != nil {
+				log.Debugf("Failed when parsing server URL: %s", err)
+				return 0, 0, err
+			} else {
+				target = u.Hostname()
+			}
+		}
+	default:
 		target = s.IP
 	}
 
 	p, err := ping.NewPinger(target)
 	if err != nil {
 		log.Debugf("ICMP ping failed: %s, will use HTTP ping", err)
-		return s.PingAndJitter(count + 2)
+		return s.PingAndJitter(count+2, network)
 	}
 	p.SetPrivileged(true)
 	p.SetNetwork(network)
@@ -131,7 +189,7 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, f
 	if err := p.Run(); err != nil {
 		log.Debugf("Failed to ping target host: %s", err)
 		log.Debug("Will try TCP ping")
-		return s.PingAndJitter(count + 2)
+		return s.PingAndJitter(count+2, network)
 	}
 
 	stats := p.Statistics()
@@ -154,19 +212,27 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, f
 	if len(stats.Rtts) == 0 {
 		s.NoICMP = true
 		log.Debugf("No ICMP pings returned for server %s (%s), trying TCP ping", s.Name, s.IP)
-		return s.PingAndJitter(count + 2)
+		return s.PingAndJitter(count+2, network)
 	}
 
 	return float64(stats.AvgRtt.Milliseconds()), jitter, nil
 }
 
 // PingAndJitter pings the server via accessing ping URL and calculate the average ping and jitter
-func (s *Server) PingAndJitter(count int) (float64, float64, error) {
+func (s *Server) PingAndJitter(count int, network string) (float64, float64, error) {
 	var target string
 
-	if s.Perception {
+	switch s.Type {
+	case Perception:
 		target = s.PingURL
-	} else {
+	case WirelessSpeed:
+		switch network {
+		case "ip6":
+			target = s.URLv6
+		default:
+			target = s.URL
+		}
+	default:
 		target = fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
 	}
 
@@ -179,9 +245,9 @@ func (s *Server) PingAndJitter(count int) (float64, float64, error) {
 	}
 	if s.HwType == 1 {
 		req.Host = s.HwPingHeaders
-		req.Header.Set("User-Agent", UserAgentHW)
+		req.Header.Set("User-Agent", GenexUA)
 	} else {
-		req.Header.Set("User-Agent", UserAgentTS)
+		req.Header.Set("User-Agent", AndroidUA)
 	}
 
 	for i := 0; i < count; i++ {
@@ -221,7 +287,7 @@ func (s *Server) PingAndJitter(count int) (float64, float64, error) {
 }
 
 // Download performs the actual download test
-func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration time.Duration, token string) (float64, uint64, error) {
+func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration time.Duration, network, token string) (float64, uint64, error) {
 	counter := NewCounter()
 	counter.SetMebi(useMebi)
 
@@ -229,9 +295,18 @@ func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration
 	defer cancel()
 
 	var uri string
-	if s.Perception {
+	switch s.Type {
+	case Perception:
 		uri = s.DownloadURL
-	} else {
+	case WirelessSpeed:
+		switch network {
+		case "ip6":
+			uri = s.URLv6
+		default:
+			uri = s.URL
+		}
+		uri = fmt.Sprintf("%s/download", uri)
+	default:
 		uri = fmt.Sprintf("http://%s:%s/speed/File(1G).dl?key=%s", s.IP, s.Port, token)
 	}
 
@@ -243,9 +318,9 @@ func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration
 
 	if s.HwType == 1 {
 		req.Host = s.HwDownloadHeaders
-		req.Header.Set("User-Agent", UserAgentHW)
+		req.Header.Set("User-Agent", GenexUA)
 	} else {
-		req.Header.Set("User-Agent", UserAgent)
+		req.Header.Set("User-Agent", BrowserUA)
 		req.Header.Set("Accept", "*/*")
 		req.Header.Set("Connection", "close")
 	}
@@ -312,7 +387,7 @@ Loop:
 }
 
 // Upload performs the actual upload test
-func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, uploadSize int, duration time.Duration, token string) (float64, uint64, error) {
+func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, uploadSize int, duration time.Duration, network, token string) (float64, uint64, error) {
 	counter := NewCounter()
 	counter.SetMebi(useMebi)
 	counter.SetUploadSize(uploadSize)
@@ -328,9 +403,18 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, up
 	defer cancel()
 
 	var uri string
-	if s.Perception {
+	switch s.Type {
+	case Perception:
 		uri = s.UploadURL
-	} else {
+	case WirelessSpeed:
+		switch network {
+		case "ip6":
+			uri = s.URLv6
+		default:
+			uri = s.URL
+		}
+		uri = fmt.Sprintf("%s/upload", uri)
+	default:
 		uri = fmt.Sprintf("http://%s:%s/speed/doAnalsLoad.do", s.IP, s.Port)
 	}
 
@@ -342,13 +426,17 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, up
 
 	if s.HwType == 1 {
 		req.Host = s.HwUploadHeaders
-		req.Header.Set("User-Agent", UserAgentHW)
+		req.Header.Set("User-Agent", GenexUA)
 	} else {
-		req.Header.Set("User-Agent", UserAgentTS)
-		req.Header.Set("Connection", "close")
-		req.Header.Set("Charset", "UTF-8")
-		req.Header.Set("Key", token)
-		req.Header.Set("Content-Type", "multipart/form-data;boundary=00content0boundary00")
+		req.Header.Set("User-Agent", AndroidUA)
+		if s.Type != WirelessSpeed {
+			req.Header.Set("Connection", "close")
+			req.Header.Set("Charset", "UTF-8")
+			req.Header.Set("Key", token)
+			req.Header.Set("Content-Type", "multipart/form-data;boundary=00content0boundary00")
+		} else {
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		}
 	}
 
 	uploadDone := make(chan struct{}, requests)

@@ -32,6 +32,7 @@ import (
 const (
 	apiBaseUrl           = `https://dlc.cnspeedtest.com:8043`
 	apiPerceptionBaseUrl = `https://ux.caict.ac.cn`
+	apiWirelessBaseUrl   = `https://gw2.gdspeed.cn:9090`
 )
 
 var DomainRe = regexp.MustCompile(`([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.)+([a-zA-Z][-a-zA-Z]{0,62})`)
@@ -53,6 +54,9 @@ type PingResult struct {
 }
 
 func GetRandom(tok, pre string, l int) string {
+	if tok == "" {
+		tok = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	}
 	bs := []byte(tok)
 	var res []byte
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -131,7 +135,7 @@ func Register() (string, error) {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return "", err
 	}
-	req.Header.Set("User-Agent", defs.UserAgentTS)
+	req.Header.Set("User-Agent", defs.AndroidUA)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -227,8 +231,7 @@ func SpeedTest(c *cli.Context) error {
 		ispInfo, _ = getIPInfo()
 	}
 
-	var isCN = false
-
+	isCN := false
 	if len(c.StringSlice(defs.OptionProvince)) > 0 {
 		op := c.StringSlice(defs.OptionProvince)
 		for _, p := range provinces {
@@ -250,14 +253,29 @@ func SpeedTest(c *cli.Context) error {
 		}
 	}
 
+	hasGlobal, hasPerception, hasWireless := false, false, false
+	if len(c.StringSlice(defs.OptionServer)) > 0 {
+		for _, s := range c.StringSlice(defs.OptionServer) {
+			if strings.HasPrefix(s, "P") {
+				hasPerception = true
+			} else if strings.HasPrefix(s, "W") {
+				hasWireless = true
+			} else {
+				hasGlobal = true
+			}
+		}
+	} else {
+		hasGlobal, hasPerception, hasWireless = true, true, true
+	}
+
 	// fetch the server list JSON and parse it into the `servers` array
 	log.Infof("Retrieving server list")
 
-	var serversT []defs.ServerTaier
+	var serversT []defs.ServerGlobal
 
-	if !c.Bool(defs.OptionDisableTai) && !forceIPv6 {
+	if !c.Bool(defs.OptionDisableTai) && !forceIPv6 && hasGlobal {
 		if isCN {
-			serversT, err = getRecommendServers(ispInfo.IP)
+			serversT, err = getGlobalServerList(ispInfo.IP)
 			for _, s := range serversT {
 				servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, City: s.City, ISP: s.ISP})
 			}
@@ -268,7 +286,7 @@ func SpeedTest(c *cli.Context) error {
 						servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, City: s.City, ISP: s.ISP})
 					}
 				}
-				servers, err = preprocessServers(servers, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList), false, false)
+				servers, err = preprocessServers(servers, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList))
 			}
 		}
 	}
@@ -276,17 +294,27 @@ func SpeedTest(c *cli.Context) error {
 	var serversP []defs.Server
 	var serversPT []defs.Server
 
-	if !c.Bool(defs.OptionDisablePet) && !(isCN && len(servers) > 0) {
+	if !c.Bool(defs.OptionDisablePet) && !(isCN && len(servers) > 0) && hasPerception {
 		if len(provs) <= 0 {
-			serversP, err = getServerList(defs.DeviceID, nil, false)
+			serversP, err = getPerceptionServerList(nil)
 		} else {
 			for _, s := range provs {
-				serversPT, err = getServerList(defs.DeviceID, &s, !forceIPv6)
+				serversPT, err = getPerceptionServerList(&s)
 				serversP = append(serversP, serversPT...)
 			}
 		}
-		serversP, err = preprocessServers(serversP, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList), true, forceIPv6)
+		serversP, err = preprocessServers(serversP, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList))
 		servers = append(servers, serversP...)
+	}
+
+	var serversW []defs.Server
+
+	if !c.Bool(defs.OptionDisableWir) && !(isCN && len(servers) > 0) && hasWireless {
+		if len(provs) <= 0 || checkProv(provs, "广东") {
+			serversW, err = getWirelessServerList()
+			serversW, err = preprocessServers(serversW, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList))
+			servers = append(servers, serversW...)
+		}
 	}
 
 	if len(servers) == 0 {
@@ -301,9 +329,12 @@ func SpeedTest(c *cli.Context) error {
 	// if --list is given, list all the servers fetched and exit
 	if c.Bool(defs.OptionList) {
 		for _, svr := range servers {
-			if svr.Perception {
-				fmt.Printf("T%d: %s (%s)\n", svr.ID, svr.Name, svr.City)
-			} else {
+			switch svr.Type {
+			case defs.Perception:
+				fmt.Printf("P%d: %s (%s)\n", svr.ID, svr.Name, svr.City)
+			case defs.WirelessSpeed:
+				fmt.Printf("W%d: %s (%s)\n", svr.ID, svr.Name, svr.ShowCity())
+			default:
 				fmt.Printf("%d: %s (%s)\n", svr.ID, svr.Name, svr.ShowCity())
 			}
 		}
@@ -445,7 +476,7 @@ func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGro
 		server := job.Server
 
 		// check the server is up by accessing the ping URL and checking its returned value == empty and status code == 200
-		if server.IsUp() {
+		if server.IsUp(network) {
 			// skip ICMP if option given
 			server.NoICMP = noICMP
 
@@ -466,18 +497,17 @@ func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGro
 	}
 }
 
-// getServerList fetches the server JSON from a remote server
-func getServerList(deviceId string, prov *defs.ProvinceInfo, filter bool) ([]defs.Server, error) {
+// getPerceptionServerList fetches the server JSON from perception
+func getPerceptionServerList(prov *defs.ProvinceInfo) ([]defs.Server, error) {
 	// getting the server list from remote
 	var servers []defs.Server
-	var serversFiltered []defs.Server
 	var uri string
 	old := false
 
 	if prov != nil {
-		uri = fmt.Sprintf("%s/screen/taier/app/getSpeedServiceByUserId?deviceId=%s&lon=%s&lat=%s&userId=-10000&province=%s&operatorId=-1", apiPerceptionBaseUrl, deviceId, prov.Lon, prov.Lat, prov.Name)
+		uri = fmt.Sprintf("%s/screen/taier/app/getSpeedServiceByUserId?deviceId=%s&lon=%s&lat=%s&userId=-10000&province=%s&operatorId=-1", apiPerceptionBaseUrl, defs.DeviceID, prov.Lon, prov.Lat, prov.Name)
 	} else {
-		uri = fmt.Sprintf("%s/screen/taier/ftp/encrypt/information?deviceId=%s", apiPerceptionBaseUrl, deviceId)
+		uri = fmt.Sprintf("%s/screen/taier/ftp/encrypt/information?deviceId=%s", apiPerceptionBaseUrl, defs.DeviceID)
 		old = true
 	}
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
@@ -485,7 +515,7 @@ func getServerList(deviceId string, prov *defs.ProvinceInfo, filter bool) ([]def
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", defs.UserAgentTS)
+	req.Header.Set("User-Agent", defs.AndroidUA)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -534,8 +564,30 @@ func getServerList(deviceId string, prov *defs.ProvinceInfo, filter bool) ([]def
 		}
 	}
 
-	if prov != nil && filter {
-		for _, s := range servers {
+	var serversResolved []defs.Server
+	for _, s := range servers {
+		s.Type = defs.Perception
+		if downloadUrl, err := url.Parse(s.DownloadURL); err == nil {
+			host := downloadUrl.Hostname()
+			s.URL = host
+			if DomainRe.MatchString(host) {
+				if records, err := net.LookupHost(host); err == nil {
+					for _, i := range records {
+						if strings.Contains(i, ":") {
+							s.IPv6 = i
+						} else {
+							s.IP = i
+						}
+					}
+				}
+			}
+		}
+		serversResolved = append(serversResolved, s)
+	}
+
+	var serversFiltered []defs.Server
+	if prov != nil {
+		for _, s := range serversResolved {
 			if checkProv([]defs.ProvinceInfo{*prov}, s.Province) {
 				serversFiltered = append(serversFiltered, s)
 			}
@@ -543,16 +595,16 @@ func getServerList(deviceId string, prov *defs.ProvinceInfo, filter bool) ([]def
 		return serversFiltered, nil
 	}
 
-	return servers, nil
+	return serversResolved, nil
 }
 
-func getRecommendServers(ip string) ([]defs.ServerTaier, error) {
+func getGlobalServerList(ip string) ([]defs.ServerGlobal, error) {
 	uri := fmt.Sprintf("%s/dataServer/mobilematch_list.php?ip=%s&network=4&ipv6=0", apiBaseUrl, ip)
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", defs.UserAgentTS)
+	req.Header.Set("User-Agent", defs.AndroidUA)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -565,7 +617,7 @@ func getRecommendServers(ip string) ([]defs.ServerTaier, error) {
 	}
 	defer resp.Body.Close()
 
-	var s []defs.ServerTaier
+	var s []defs.ServerGlobal
 	if err := json.Unmarshal(b, &s); err == nil {
 		return s, nil
 	} else {
@@ -573,8 +625,63 @@ func getRecommendServers(ip string) ([]defs.ServerTaier, error) {
 	}
 }
 
+func getWirelessServerList() ([]defs.Server, error) {
+	uri := fmt.Sprintf("%s/GSpeedTestCloud/test/broadbandAccessResource.action", apiWirelessBaseUrl)
+	var data = defs.GDPayload{Nonce: GetRandom("", "", 16)}
+	data.Init()
+
+	payload, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPost, uri, bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
+	req.Header.Set("User-Agent", defs.BrowserUA)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var res map[string]json.RawMessage
+	if err := json.Unmarshal(b, &res); err != nil {
+		return nil, err
+	}
+
+	var servers []defs.Server
+	type Data struct {
+		Province  string
+		Resources []defs.ServerWireless
+	}
+	var ret struct{ Datas []Data }
+	if string(res["ret_code"]) == "0" {
+		if err := json.Unmarshal(res["ret"], &ret); err != nil {
+			return nil, err
+		}
+	} else {
+		return nil, errors.New(string(res["ret_msg"]))
+	}
+
+	for _, d := range ret.Datas {
+		for _, r := range d.Resources {
+			servers = append(servers, defs.Server{ID: r.ID, Name: r.Name, IP: r.IP, IPv6: r.IPv6, URL: r.URL, URLv6: r.URLv6, Province: r.Prov, City: r.City, ISP: r.GetISP(), Type: defs.WirelessSpeed})
+		}
+	}
+
+	return servers, nil
+}
+
 // preprocessServers makes some needed modifications to the servers fetched
-func preprocessServers(servers []defs.Server, excludes, specific []string, filter bool, perception bool, forceIPv6 bool) ([]defs.Server, error) {
+func preprocessServers(servers []defs.Server, excludes, specific []string, filter bool) ([]defs.Server, error) {
 	if len(excludes) > 0 && len(specific) > 0 {
 		return nil, errors.New("either --exclude or --specific can be used")
 	}
@@ -584,14 +691,18 @@ func preprocessServers(servers []defs.Server, excludes, specific []string, filte
 		if len(excludes) > 0 {
 			var ret []defs.Server
 			for _, server := range servers {
-				s := strconv.Itoa(server.ID)
-				if perception {
-					s = fmt.Sprintf("T%d", server.ID)
+				var s string
+				switch server.Type {
+				case defs.Perception:
+					s = fmt.Sprintf("P%d", server.ID)
+				case defs.WirelessSpeed:
+					s = fmt.Sprintf("W%d", server.ID)
+				default:
+					s = strconv.Itoa(server.ID)
 				}
 				if contains(excludes, s) {
 					continue
 				}
-				server.Perception = perception
 				ret = append(ret, server)
 			}
 			return ret, nil
@@ -602,59 +713,21 @@ func preprocessServers(servers []defs.Server, excludes, specific []string, filte
 		if len(specific) > 0 && !contains(specific, "-1") {
 			var ret []defs.Server
 			for _, server := range servers {
-				s := strconv.Itoa(server.ID)
-				if perception {
-					s = fmt.Sprintf("T%d", server.ID)
+				var s string
+				switch server.Type {
+				case defs.Perception:
+					s = fmt.Sprintf("P%d", server.ID)
+				case defs.WirelessSpeed:
+					s = fmt.Sprintf("W%d", server.ID)
+				default:
+					s = strconv.Itoa(server.ID)
 				}
 				if contains(specific, s) {
-					server.Perception = perception
 					ret = append(ret, server)
 				}
 			}
 			return ret, nil
 		}
-	}
-
-	if perception {
-		var ret []defs.Server
-		for _, server := range servers {
-			if forceIPv6 {
-				pingUrl, err := url.Parse(server.PingURL)
-				if err != nil {
-					continue
-				} else {
-					host := pingUrl.Host
-					if strings.Contains(host, ":") {
-						host = strings.Split(host, ":")[0]
-					}
-					if !DomainRe.MatchString(host) {
-						continue
-					} else {
-						records, err := net.LookupHost(host)
-						if err != nil {
-							continue
-						} else {
-							hasIPv6 := false
-							ip := server.IP
-							for _, i := range records {
-								if strings.Contains(i, ":") {
-									hasIPv6 = true
-									ip = i
-									break
-								}
-							}
-							if !hasIPv6 {
-								continue
-							}
-							server.IP = ip
-						}
-					}
-				}
-			}
-			server.Perception = perception
-			ret = append(ret, server)
-		}
-		return ret, nil
 	}
 
 	return servers, nil
@@ -689,7 +762,7 @@ func getIPInfo() (*defs.IPInfoResponse, error) {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return nil, err
 	}
-	req.Header.Set("User-Agent", defs.UserAgentTS)
+	req.Header.Set("User-Agent", defs.AndroidUA)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

@@ -37,8 +37,10 @@ const (
 	OptionVersion       = "version"
 	OptionVersionAlt    = "v"
 	OptionDebug         = "debug"
-	OptionDisablePet    = "disable-taier"
-	OptionDisablePetAlt = "T"
+	OptionDisablePet    = "disable-perception"
+	OptionDisablePetAlt = "P"
 	OptionDisableTai    = "disable-global"
 	OptionDisableTaiAlt = "G"
+	OptionDisableWir    = "disable-wireless"
+	OptionDisableWirAlt = "W"
 )

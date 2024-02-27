@@ -107,7 +107,7 @@ func main() {
 			&cli.BoolFlag{
 				Name:    defs.OptionList,
 				Aliases: []string{defs.OptionListAlt},
-				Usage:   "Display a list of TaierSpeed servers",
+				Usage:   "Display a list of servers",
 			},
 			&cli.StringSliceFlag{
 				Name:    defs.OptionServer,
@@ -165,14 +165,19 @@ func main() {
 				Hidden:  true,
 			},
 			&cli.BoolFlag{
-				Name:    defs.OptionDisablePet,
-				Aliases: []string{defs.OptionDisablePetAlt},
-				Usage:   "Don't use taierspeed servers",
-			},
-			&cli.BoolFlag{
 				Name:    defs.OptionDisableTai,
 				Aliases: []string{defs.OptionDisableTaiAlt},
-				Usage:   "Don't use globalspeed servers",
+				Usage:   "Don't use Global Speed servers",
+			},
+			&cli.BoolFlag{
+				Name:    defs.OptionDisablePet,
+				Aliases: []string{defs.OptionDisablePetAlt},
+				Usage:   "Don't use Perception servers",
+			},
+			&cli.BoolFlag{
+				Name:    defs.OptionDisableWir,
+				Aliases: []string{defs.OptionDisableWirAlt},
+				Usage:   "Don't use Wireless Speed servers",
 			},
 		},
 	}

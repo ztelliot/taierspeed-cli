@@ -44,7 +44,7 @@ func enQueue(s defs.Server) string {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return ""
 	}
-	req.Header.Set("User-Agent", defs.UserAgentTS)
+	req.Header.Set("User-Agent", defs.AndroidUA)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -81,7 +81,7 @@ func deQueue(s defs.Server, key string) bool {
 	}
 	req.Header.Set("Charset", "utf-8")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("User-Agent", defs.UserAgentTS)
+	req.Header.Set("User-Agent", defs.AndroidUA)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -125,15 +125,23 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 	// fetch current user's IP info
 	for _, currentServer := range servers {
 		if !silent || c.Bool(defs.OptionSimple) {
-			if currentServer.Perception {
+			name, ip, id := currentServer.Name, currentServer.IP, strconv.Itoa(currentServer.ID)
+			switch currentServer.Type {
+			case defs.Perception:
 				line := strings.Split(currentServer.City, "-")
-				fmt.Printf("Server:\t\t%s - %s [%s] (id = T%d)\n", currentServer.Name, line[len(line)-1], currentServer.IP, currentServer.ID)
-			} else {
-				fmt.Printf("Server:\t\t%s [%s] (id = %d)\n", currentServer.Name, currentServer.IP, currentServer.ID)
+				name = fmt.Sprintf("%s - %s", currentServer.Name, line[len(line)-1])
+				id = fmt.Sprintf("P%d", currentServer.ID)
+			case defs.WirelessSpeed:
+				id = fmt.Sprintf("W%d", currentServer.ID)
 			}
+			switch network {
+			case "ip6":
+				ip = currentServer.IPv6
+			}
+			fmt.Printf("Server:\t\t%s [%s] (id = %s)\n", name, ip, id)
 		}
 
-		if currentServer.IsUp() {
+		if currentServer.IsUp(network) {
 			// get ping and jitter value
 			var pb *spinner.Spinner
 			if !silent {
@@ -159,7 +167,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			}
 
 			token := ""
-			if !(currentServer.Perception || (c.Bool(defs.OptionNoDownload) && c.Bool(defs.OptionNoUpload))) {
+			if currentServer.Type == defs.GlobalSpeed && !(c.Bool(defs.OptionNoDownload) && c.Bool(defs.OptionNoUpload)) {
 				token = enQueue(currentServer)
 				if len(token) <= 0 || token == "-" {
 					log.Errorf("Get token failed")
@@ -173,7 +181,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			if c.Bool(defs.OptionNoDownload) {
 				log.Info("Download test is disabled")
 			} else {
-				download, br, err := currentServer.Download(silent, c.Bool(defs.OptionBytes), c.Bool(defs.OptionMebiBytes), c.Int(defs.OptionConcurrent), time.Duration(c.Int(defs.OptionDuration))*time.Second, token)
+				download, br, err := currentServer.Download(silent, c.Bool(defs.OptionBytes), c.Bool(defs.OptionMebiBytes), c.Int(defs.OptionConcurrent), time.Duration(c.Int(defs.OptionDuration))*time.Second, network, token)
 				if err != nil {
 					log.Errorf("Failed to get download speed: %s", err)
 					return err
@@ -196,7 +204,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			if c.Bool(defs.OptionNoUpload) {
 				log.Info("Upload test is disabled")
 			} else {
-				upload, bw, err := currentServer.Upload(c.Bool(defs.OptionNoPreAllocate), silent, c.Bool(defs.OptionBytes), c.Bool(defs.OptionMebiBytes), c.Int(defs.OptionConcurrent), c.Int(defs.OptionUploadSize), time.Duration(c.Int(defs.OptionDuration))*time.Second, token)
+				upload, bw, err := currentServer.Upload(c.Bool(defs.OptionNoPreAllocate), silent, c.Bool(defs.OptionBytes), c.Bool(defs.OptionMebiBytes), c.Int(defs.OptionConcurrent), c.Int(defs.OptionUploadSize), time.Duration(c.Int(defs.OptionDuration))*time.Second, network, token)
 				if err != nil {
 					log.Errorf("Failed to get upload speed: %s", err)
 					return err
@@ -213,7 +221,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 				bytesWritten = bw
 			}
 
-			if !(currentServer.Perception || (c.Bool(defs.OptionNoDownload) && c.Bool(defs.OptionNoUpload))) {
+			if currentServer.Type == defs.GlobalSpeed && !(c.Bool(defs.OptionNoDownload) && c.Bool(defs.OptionNoUpload)) {
 				deQueue(currentServer, token)
 			}
 
