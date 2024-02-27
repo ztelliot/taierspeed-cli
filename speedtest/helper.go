@@ -117,6 +117,9 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 		} else {
 			fmt.Printf("ISP:\n")
 		}
+		if len(servers) > 1 {
+			fmt.Printf("\n")
+		}
 	}
 
 	var repsJson []report.JSONReport

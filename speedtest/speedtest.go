@@ -317,6 +317,19 @@ func SpeedTest(c *cli.Context) error {
 		}
 	}
 
+	if forceIPv4 || forceIPv6 {
+		var serversFiltered []defs.Server
+		for _, server := range servers {
+			if forceIPv4 && server.IP != "" {
+				serversFiltered = append(serversFiltered, server)
+			}
+			if forceIPv6 && server.IPv6 != "" {
+				serversFiltered = append(serversFiltered, server)
+			}
+		}
+		servers = serversFiltered
+	}
+
 	if len(servers) == 0 {
 		err = errors.New("specified server(s) not found")
 	}
@@ -329,13 +342,20 @@ func SpeedTest(c *cli.Context) error {
 	// if --list is given, list all the servers fetched and exit
 	if c.Bool(defs.OptionList) {
 		for _, svr := range servers {
+			var stacks []string
+			if svr.IP != "" {
+				stacks = append(stacks, "IPv4")
+			}
+			if svr.IPv6 != "" {
+				stacks = append(stacks, "IPv6")
+			}
 			switch svr.Type {
 			case defs.Perception:
-				fmt.Printf("P%d: %s (%s)\n", svr.ID, svr.Name, svr.City)
+				fmt.Printf("P%d: %s (%s) %v\n", svr.ID, svr.Name, svr.City, stacks)
 			case defs.WirelessSpeed:
-				fmt.Printf("W%d: %s (%s)\n", svr.ID, svr.Name, svr.ShowCity())
+				fmt.Printf("W%d: %s (%s) %v\n", svr.ID, svr.Name, svr.ShowCity(), stacks)
 			default:
-				fmt.Printf("%d: %s (%s)\n", svr.ID, svr.Name, svr.ShowCity())
+				fmt.Printf("%d: %s (%s) %v\n", svr.ID, svr.Name, svr.ShowCity(), stacks)
 			}
 		}
 		return nil
