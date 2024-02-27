@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/briandowns/spinner"
@@ -130,8 +129,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 		if !silent || c.Bool(defs.OptionSimple) {
 			name, ip := currentServer.Name, currentServer.IP
 			if currentServer.Type == defs.Perception {
-				line := strings.Split(currentServer.City, "-")
-				name = fmt.Sprintf("%s - %s", currentServer.Name, line[len(line)-1])
+				name = fmt.Sprintf("%s - %s", currentServer.Name, currentServer.ISP)
 			}
 			if network == "ip6" {
 				ip = currentServer.IPv6

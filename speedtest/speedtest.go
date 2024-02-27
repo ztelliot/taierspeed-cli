@@ -348,7 +348,7 @@ func SpeedTest(c *cli.Context) error {
 			if svr.IPv6 != "" {
 				stacks = append(stacks, "IPv6")
 			}
-			fmt.Printf("%s: %s (%s) %v\n", svr.GetID(), svr.Name, svr.ShowCity(), stacks)
+			fmt.Printf("%s: %s (%s) [%s] %v\n", svr.GetID(), svr.Name, svr.ShowCity(), svr.ISP, stacks)
 		}
 		return nil
 	}
@@ -580,6 +580,16 @@ func getPerceptionServerList(prov *defs.ProvinceInfo) ([]defs.Server, error) {
 	for _, s := range servers {
 		if s.Type == 1 {
 			continue
+		}
+		switch s.ISP {
+		case "0":
+			s.ISP = "移动"
+		case "1":
+			s.ISP = "电信"
+		case "3":
+			s.ISP = "联通"
+		case "5":
+			s.ISP = "教育网"
 		}
 		s.Type = defs.Perception
 		if downloadUrl, err := url.Parse(s.DownloadURL); err == nil {

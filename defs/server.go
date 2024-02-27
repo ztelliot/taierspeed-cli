@@ -73,7 +73,7 @@ type Server struct {
 
 	Province string `json:"province"`
 	City     string `json:"city"`
-	ISP      string `json:"-"`
+	ISP      string `json:"operator_id"`
 
 	URL         string `json:"-"`
 	URLv6       string `json:"-"`
