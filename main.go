@@ -121,6 +121,14 @@ func main() {
 				Aliases: []string{defs.OptionProvinceAlt},
 				Usage: "Specify a `PROVINCE` ID or Code to test against. Can be supplied\n" +
 					"\tmultiple times.",
+				Hidden: true,
+			},
+			&cli.StringSliceFlag{
+				Name:    defs.OptionISP,
+				Aliases: []string{defs.OptionISPAlt},
+				Usage: "Specify a `ISP` ASN or Code to test against. Can be supplied\n" +
+					"\tmultiple times.",
+				Hidden: true,
 			},
 			&cli.StringSliceFlag{
 				Name: defs.OptionExclude,

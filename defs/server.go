@@ -44,19 +44,19 @@ func (s *ServerGlobal) GetProvince(provinces *[]ProvinceInfo) *ProvinceInfo {
 func (s *ServerGlobal) GetISP() *ISPInfo {
 	switch s.ISP {
 	case "电信":
-		return &CHINANET
+		return &TELECOM
 	case "联通":
 		return &UNICOM
 	case "移动":
-		return &CMCC
+		return &MOBILE
 	case "教育网":
 		return &CERNET
 	case "广电网":
-		return &CHINABTN
+		return &CATV
 	case "鹏博士":
-		return &DXTNET
+		return &DRPENG
 	default:
-		for _, isp := range []*ISPInfo{&CHINANET, &UNICOM, &CMCC, &CERNET, &CHINABTN, &DXTNET} {
+		for _, isp := range ISPList {
 			if strings.HasSuffix(s.Name, isp.Name) {
 				return isp
 			}
@@ -82,11 +82,11 @@ type ServerWireless struct {
 func (s *ServerWireless) GetISP() *ISPInfo {
 	switch s.ISP {
 	case 1:
-		return &CMCC
+		return &MOBILE
 	case 2:
 		return &UNICOM
 	case 3:
-		return &CHINANET
+		return &TELECOM
 	default:
 		return &DEFISP
 	}

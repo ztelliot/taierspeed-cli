@@ -47,19 +47,21 @@ var (
 )
 
 type ISPInfo struct {
-	ID   string `csv:"id"`
-	Code string `csv:"code"`
-	Name string `csv:"name"`
+	ID    string
+	Short string
+	Code  string
+	Name  string
 }
 
 var (
-	CHINANET = ISPInfo{ID: "4134", Code: "CHINANET", Name: "电信"}
-	CERNET   = ISPInfo{ID: "4538", Code: "CERNET", Name: "教育网"}
-	UNICOM   = ISPInfo{ID: "4837", Code: "UNICOM", Name: "联通"}
-	CHINABTN = ISPInfo{ID: "7641", Code: "CHINABTN", Name: "广电网"}
-	CMCC     = ISPInfo{ID: "9808", Code: "CMCC", Name: "移动"}
-	DXTNET   = ISPInfo{ID: "17964", Code: "DXTNET", Name: "鹏博士"}
-	DEFISP   = ISPInfo{ID: "", Code: "UNKNOWN", Name: "未知"}
+	TELECOM = ISPInfo{"4134", "ct", "TELECOM", "电信"}
+	CERNET  = ISPInfo{"4538", "cernet", "CERNET", "教育网"}
+	UNICOM  = ISPInfo{"4837", "cu", "UNICOM", "联通"}
+	CATV    = ISPInfo{"7641", "catv", "CHINABTN", "广电网"}
+	MOBILE  = ISPInfo{"9808", "cm", "MOBILE", "移动"}
+	DRPENG  = ISPInfo{"17964", "drpeng", "DXTNET", "鹏博士"}
+	DEFISP  = ISPInfo{"", "uk", "UNKNOWN", "未知"}
+	ISPList = []*ISPInfo{&TELECOM, &CERNET, &UNICOM, &CATV, &MOBILE, &DRPENG}
 )
 
 type GDPayload struct {
