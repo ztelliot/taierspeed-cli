@@ -272,6 +272,7 @@ func SpeedTest(c *cli.Context) error {
 	}
 
 	if len(c.StringSlice(defs.OptionISP)) > 0 || len(serverGroup) > 0 {
+		isCN = false
 		oi := c.StringSlice(defs.OptionISP)
 		if len(oi) <= 0 {
 			oi = []string{serverGroup[1]}
