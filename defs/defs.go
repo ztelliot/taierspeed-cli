@@ -41,6 +41,27 @@ type ProvinceInfo struct {
 	Lat   string `csv:"lat"`
 }
 
+var (
+	GUANGDONG = ProvinceInfo{"44", "gd", "广东", "广东省", "113.266887", "23.133306"}
+	DEFPROV   = ProvinceInfo{"", "uk", "未知", "未知", "0", "0"}
+)
+
+type ISPInfo struct {
+	ID   string `csv:"id"`
+	Code string `csv:"code"`
+	Name string `csv:"name"`
+}
+
+var (
+	CHINANET = ISPInfo{ID: "4134", Code: "CHINANET", Name: "电信"}
+	CERNET   = ISPInfo{ID: "4538", Code: "CERNET", Name: "教育网"}
+	UNICOM   = ISPInfo{ID: "4837", Code: "UNICOM", Name: "联通"}
+	CHINABTN = ISPInfo{ID: "7641", Code: "CHINABTN", Name: "广电网"}
+	CMCC     = ISPInfo{ID: "9808", Code: "CMCC", Name: "移动"}
+	DXTNET   = ISPInfo{ID: "17964", Code: "DXTNET", Name: "鹏博士"}
+	DEFISP   = ISPInfo{ID: "", Code: "UNKNOWN", Name: "未知"}
+)
+
 type GDPayload struct {
 	Brand     string `json:"c_brand"`
 	IMEI      string `json:"c_imei"`

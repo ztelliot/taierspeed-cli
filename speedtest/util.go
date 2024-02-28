@@ -5,8 +5,13 @@ package speedtest
 
 import (
 	"net"
+	"time"
 )
 
 func newInterfaceDialer(iface string) (dialer *net.Dialer) {
-	return nil
+	dialer = &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	return dialer
 }

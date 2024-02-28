@@ -18,6 +18,15 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+func MatchProvince(prov string, provinces *[]ProvinceInfo) *ProvinceInfo {
+	for _, p := range *provinces {
+		if p.Short == prov || p.Name == prov || strings.Contains(p.Name, prov) || strings.Contains(prov, p.Short) {
+			return &p
+		}
+	}
+	return &DEFPROV
+}
+
 type ServerGlobal struct {
 	ID   int    `json:"hostid,string"`
 	Name string `json:"hostname"`
@@ -26,6 +35,34 @@ type ServerGlobal struct {
 	Prov string `json:"pname"`
 	City string `json:"city"`
 	ISP  string `json:"oper,omitempty"`
+}
+
+func (s *ServerGlobal) GetProvince(provinces *[]ProvinceInfo) *ProvinceInfo {
+	return MatchProvince(s.Prov, provinces)
+}
+
+func (s *ServerGlobal) GetISP() *ISPInfo {
+	switch s.ISP {
+	case "电信":
+		return &CHINANET
+	case "联通":
+		return &UNICOM
+	case "移动":
+		return &CMCC
+	case "教育网":
+		return &CERNET
+	case "广电网":
+		return &CHINABTN
+	case "鹏博士":
+		return &DXTNET
+	default:
+		for _, isp := range []*ISPInfo{&CHINANET, &UNICOM, &CMCC, &CERNET, &CHINABTN, &DXTNET} {
+			if strings.HasSuffix(s.Name, isp.Name) {
+				return isp
+			}
+		}
+		return &DEFISP
+	}
 }
 
 type ServerWireless struct {
@@ -42,16 +79,16 @@ type ServerWireless struct {
 	ISP    int    `json:"s_operator"`
 }
 
-func (s *ServerWireless) GetISP() string {
+func (s *ServerWireless) GetISP() *ISPInfo {
 	switch s.ISP {
 	case 1:
-		return "移动"
+		return &CMCC
 	case 2:
-		return "联通"
+		return &UNICOM
 	case 3:
-		return "电信"
+		return &CHINANET
 	default:
-		return ""
+		return &DEFISP
 	}
 }
 
@@ -71,9 +108,11 @@ type Server struct {
 	IPv6 string `json:"-"`
 	Port string `json:"-"`
 
-	Province string `json:"province"`
-	City     string `json:"city"`
-	ISP      string `json:"operator_id"`
+	Province     string        `json:"province"`
+	ProvinceInfo *ProvinceInfo `json:"-"`
+	City         string        `json:"city"`
+	Operator     string        `json:"operator_id"`
+	ISP          *ISPInfo      `json:"-"`
 
 	URL         string `json:"-"`
 	URLv6       string `json:"-"`
@@ -90,6 +129,10 @@ type Server struct {
 	Type   ServerType `json:"protocol_type"`
 }
 
+func (s *Server) SetProvince(provinces *[]ProvinceInfo) {
+	s.ProvinceInfo = MatchProvince(s.Province, provinces)
+}
+
 func (s *Server) GetID() string {
 	switch s.Type {
 	case Perception:
@@ -98,19 +141,6 @@ func (s *Server) GetID() string {
 		return fmt.Sprintf("W%d", s.ID)
 	default:
 		return strconv.Itoa(s.ID)
-	}
-}
-
-func (s *Server) ShowCity() string {
-	switch s.Type {
-	case Perception:
-		return s.City
-	default:
-		if strings.Contains(s.Province, s.City) {
-			return fmt.Sprintf("%s-%s", s.Province, s.ISP)
-		} else {
-			return fmt.Sprintf("%s-%s-%s", s.Province, s.City, s.ISP)
-		}
 	}
 }
 

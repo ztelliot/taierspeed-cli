@@ -129,7 +129,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 		if !silent || c.Bool(defs.OptionSimple) {
 			name, ip := currentServer.Name, currentServer.IP
 			if currentServer.Type == defs.Perception {
-				name = fmt.Sprintf("%s - %s", currentServer.Name, currentServer.ISP)
+				name = fmt.Sprintf("%s - %s", currentServer.Name, currentServer.ISP.Name)
 			}
 			if network == "ip6" {
 				ip = currentServer.IPv6
@@ -256,9 +256,9 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 					rep.Server.IP = currentServer.IP
 				}
 				rep.Server.Name = currentServer.Name
-				rep.Server.Province = currentServer.Province
+				rep.Server.Province = currentServer.ProvinceInfo.Short
 				rep.Server.City = currentServer.City
-				rep.Server.ISP = currentServer.ISP
+				rep.Server.ISP = currentServer.ISP.Name
 
 				rep.Client = *ispInfo
 

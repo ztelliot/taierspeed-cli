@@ -246,9 +246,9 @@ func SpeedTest(c *cli.Context) error {
 	} else if !c.Bool(defs.OptionList) && len(c.StringSlice(defs.OptionServer)) <= 0 {
 		if ispInfo != nil && ispInfo.Country == "中国" {
 			isCN = true
-			provs = append(provs, getProvInfo(provinces, ispInfo.Region))
+			provs = append(provs, *getProvInfo(&provinces, ispInfo.Region))
 		} else {
-			provs = append(provs, getProvInfo(provinces, ""))
+			provs = append(provs, *getProvInfo(&provinces, ""))
 		}
 	}
 
@@ -276,13 +276,14 @@ func SpeedTest(c *cli.Context) error {
 		if isCN {
 			serversT, err = getGlobalServerList(ispInfo.IP)
 			for _, s := range serversT {
-				servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, City: s.City, ISP: s.ISP})
+				servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, ProvinceInfo: s.GetProvince(&provinces), City: s.City, ISP: s.GetISP()})
 			}
 		} else {
 			if err := json.Unmarshal(ServerListByte, &serversT); err == nil {
 				for _, s := range serversT {
-					if len(provs) <= 0 || checkProv(provs, s.Prov) {
-						servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, City: s.City, ISP: s.ISP})
+					prov := s.GetProvince(&provinces)
+					if len(provs) <= 0 || checkProv(provs, prov) {
+						servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, ProvinceInfo: s.GetProvince(&provinces), City: s.City, ISP: s.GetISP()})
 					}
 				}
 				servers, err = preprocessServers(servers, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList))
@@ -295,10 +296,10 @@ func SpeedTest(c *cli.Context) error {
 
 	if !c.Bool(defs.OptionDisablePet) && !(isCN && len(servers) > 0) && hasPerception {
 		if len(provs) <= 0 {
-			serversP, err = getPerceptionServerList(nil)
+			serversP, err = getPerceptionServerList(nil, &provinces)
 		} else {
 			for _, s := range provs {
-				serversPT, err = getPerceptionServerList(&s)
+				serversPT, err = getPerceptionServerList(&s, &provinces)
 				serversP = append(serversP, serversPT...)
 			}
 		}
@@ -309,8 +310,8 @@ func SpeedTest(c *cli.Context) error {
 	var serversW []defs.Server
 
 	if !c.Bool(defs.OptionDisableWir) && !(isCN && len(servers) > 0) && hasWireless {
-		if len(provs) <= 0 || checkProv(provs, "广东") {
-			serversW, err = getWirelessServerList()
+		if len(provs) <= 0 || checkProv(provs, &defs.GUANGDONG) {
+			serversW, err = getWirelessServerList(&provinces)
 			serversW, err = preprocessServers(serversW, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList))
 			servers = append(servers, serversW...)
 		}
@@ -348,7 +349,7 @@ func SpeedTest(c *cli.Context) error {
 			if svr.IPv6 != "" {
 				stacks = append(stacks, "IPv6")
 			}
-			fmt.Printf("%s: %s (%s) [%s] %v\n", svr.GetID(), svr.Name, svr.ShowCity(), svr.ISP, stacks)
+			fmt.Printf("%s: %s (%s%s) %v\n", svr.GetID(), svr.Name, svr.ProvinceInfo.Short, svr.ISP.Name, stacks)
 		}
 		return nil
 	}
@@ -510,7 +511,7 @@ func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGro
 }
 
 // getPerceptionServerList fetches the server JSON from perception
-func getPerceptionServerList(prov *defs.ProvinceInfo) ([]defs.Server, error) {
+func getPerceptionServerList(prov *defs.ProvinceInfo, provinces *[]defs.ProvinceInfo) ([]defs.Server, error) {
 	// getting the server list from remote
 	var servers []defs.Server
 	var uri string
@@ -581,15 +582,20 @@ func getPerceptionServerList(prov *defs.ProvinceInfo) ([]defs.Server, error) {
 		if s.Type == 1 {
 			continue
 		}
-		switch s.ISP {
+		s.SetProvince(provinces)
+		switch s.Operator {
 		case "0":
-			s.ISP = "移动"
+			s.ISP = &defs.CMCC
 		case "1":
-			s.ISP = "电信"
+			s.ISP = &defs.CHINANET
 		case "3":
-			s.ISP = "联通"
+			s.ISP = &defs.UNICOM
 		case "5":
-			s.ISP = "教育网"
+			s.ISP = &defs.CERNET
+		case "6":
+			s.ISP = &defs.CHINABTN
+		default:
+			s.ISP = &defs.DEFISP
 		}
 		s.Type = defs.Perception
 		if downloadUrl, err := url.Parse(s.DownloadURL); err == nil {
@@ -613,7 +619,7 @@ func getPerceptionServerList(prov *defs.ProvinceInfo) ([]defs.Server, error) {
 	var serversFiltered []defs.Server
 	if prov != nil {
 		for _, s := range serversResolved {
-			if checkProv([]defs.ProvinceInfo{*prov}, s.Province) {
+			if prov.ID == s.ProvinceInfo.ID {
 				serversFiltered = append(serversFiltered, s)
 			}
 		}
@@ -650,7 +656,7 @@ func getGlobalServerList(ip string) ([]defs.ServerGlobal, error) {
 	}
 }
 
-func getWirelessServerList() ([]defs.Server, error) {
+func getWirelessServerList(provinces *[]defs.ProvinceInfo) ([]defs.Server, error) {
 	uri := fmt.Sprintf("%s/GSpeedTestCloud/test/broadbandAccessResource.action", apiWirelessBaseUrl)
 	var data = defs.GDPayload{Nonce: GetRandom("", "", 16)}
 	data.Init()
@@ -697,8 +703,9 @@ func getWirelessServerList() ([]defs.Server, error) {
 	}
 
 	for _, d := range ret.Datas {
+		prov := defs.MatchProvince(d.Province, provinces)
 		for _, r := range d.Resources {
-			servers = append(servers, defs.Server{ID: r.ID, Name: r.Name, IP: r.IP, IPv6: r.IPv6, URL: r.URL, URLv6: r.URLv6, Province: r.Prov, City: r.City, ISP: r.GetISP(), Type: defs.WirelessSpeed})
+			servers = append(servers, defs.Server{ID: r.ID, Name: r.Name, IP: r.IP, IPv6: r.IPv6, URL: r.URL, URLv6: r.URLv6, Province: r.Prov, ProvinceInfo: prov, City: r.City, ISP: r.GetISP(), Type: defs.WirelessSpeed})
 		}
 	}
 
@@ -740,22 +747,17 @@ func preprocessServers(servers []defs.Server, excludes, specific []string, filte
 	return servers, nil
 }
 
-func getProvInfo(provinces []defs.ProvinceInfo, name string) defs.ProvinceInfo {
-	var prov defs.ProvinceInfo
+func getProvInfo(provinces *[]defs.ProvinceInfo, name string) *defs.ProvinceInfo {
+	var prov *defs.ProvinceInfo
 
 	if name != "" {
-		for _, p := range provinces {
-			if p.Short == name || strings.Contains(p.Name, name) || strings.Contains(name, p.Short) {
-				prov = p
-				break
-			}
-		}
+		prov = defs.MatchProvince(name, provinces)
 	}
 
 	if prov.ID != "" {
 		return prov
 	} else {
-		return defs.ProvinceInfo{ID: "31", Code: "sh", Short: "上海", Name: "上海市", Lon: "121.473667", Lat: "31.230525"}
+		return &defs.GUANGDONG
 	}
 }
 
@@ -809,9 +811,9 @@ func contains(arr []string, val string) bool {
 	return false
 }
 
-func checkProv(arr []defs.ProvinceInfo, val string) bool {
+func checkProv(arr []defs.ProvinceInfo, val *defs.ProvinceInfo) bool {
 	for _, v := range arr {
-		if v.Short == val || v.Name == val || strings.Contains(val, v.Short) {
+		if v.ID == val.ID {
 			return true
 		}
 	}
