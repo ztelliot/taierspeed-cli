@@ -129,6 +129,13 @@ func main() {
 					"\tmultiple times.",
 				Hidden: true,
 			},
+			&cli.StringFlag{
+				Name:    defs.OptionServerGroup,
+				Aliases: []string{defs.OptionServerGroupAlt},
+				Usage: "Filter a group of servers by `PROVINCE@ISP` to test.\n" +
+					"\tCannot be used with --province or --isp.",
+				Hidden: true,
+			},
 			&cli.StringSliceFlag{
 				Name: defs.OptionExclude,
 				Usage: "`EXCLUDE` a server from selection. Can be supplied\n" +

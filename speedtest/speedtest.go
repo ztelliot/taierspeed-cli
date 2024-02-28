@@ -189,6 +189,10 @@ func SpeedTest(c *cli.Context) error {
 		return fmt.Errorf("incompatible options '%s' and '%s'", defs.OptionSource, defs.OptionInterface)
 	}
 
+	if c.String(defs.OptionServerGroup) != "" && (len(c.StringSlice(defs.OptionProvince)) > 0 || len(c.StringSlice(defs.OptionISP)) > 0) {
+		return fmt.Errorf("incompatible options '%s' and '%s' or '%s'", defs.OptionServerGroup, defs.OptionProvince, defs.OptionISP)
+	}
+
 	// set CSV delimiter
 	gocsv.TagSeparator = c.String(defs.OptionCSVDelimiter)
 
@@ -203,6 +207,15 @@ func SpeedTest(c *cli.Context) error {
 	if req := c.Int(defs.OptionConcurrent); req <= 0 {
 		log.Errorf("Concurrent requests cannot be lower than 1: %d is given", req)
 		return errors.New("invalid concurrent requests setting")
+	}
+
+	var serverGroup []string
+	if c.String(defs.OptionServerGroup) != "" {
+		serverGroup = strings.Split(c.String(defs.OptionServerGroup), "@")
+		if len(serverGroup) != 2 || serverGroup[0] == "" || serverGroup[1] == "" {
+			log.Error("invalid server group")
+			return errors.New("invalid server group")
+		}
 	}
 
 	// HTTP requests timeout
@@ -234,8 +247,11 @@ func SpeedTest(c *cli.Context) error {
 	// TODO: refactor province filter
 
 	isCN := false
-	if len(c.StringSlice(defs.OptionProvince)) > 0 {
+	if len(c.StringSlice(defs.OptionProvince)) > 0 || len(serverGroup) > 0 {
 		op := c.StringSlice(defs.OptionProvince)
+		if len(op) <= 0 {
+			op = []string{serverGroup[0]}
+		}
 		for _, p := range provinces {
 			if contains(op, p.ID) || contains(op, p.Code) {
 				provs = append(provs, p)
@@ -255,8 +271,11 @@ func SpeedTest(c *cli.Context) error {
 		}
 	}
 
-	if len(c.StringSlice(defs.OptionISP)) > 0 {
+	if len(c.StringSlice(defs.OptionISP)) > 0 || len(serverGroup) > 0 {
 		oi := c.StringSlice(defs.OptionISP)
+		if len(oi) <= 0 {
+			oi = []string{serverGroup[1]}
+		}
 		for _, i := range defs.ISPList {
 			if contains(oi, i.ID) || contains(oi, i.Short) {
 				isps = append(isps, i)
