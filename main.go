@@ -42,12 +42,12 @@ func main() {
 			&cli.BoolFlag{
 				Name:    defs.OptionIPv4,
 				Aliases: []string{defs.OptionIPv4Alt},
-				Usage:   "Force IPv4 only, will not obey when fetch servers list",
+				Usage:   "Force IPv4 only, will not obey when fetch server list\n\t",
 			},
 			&cli.BoolFlag{
 				Name:    defs.OptionIPv6,
 				Aliases: []string{defs.OptionIPv6Alt},
-				Usage:   "Force IPv6 only, will not obey when fetch servers list",
+				Usage:   "Force IPv6 only, will not obey when fetch server list\n\t",
 			},
 			&cli.BoolFlag{
 				Name:   defs.OptionNoDownload,
@@ -62,8 +62,7 @@ func main() {
 			&cli.BoolFlag{
 				Name: defs.OptionNoICMP,
 				Usage: "Do not use ICMP ping. ICMP doesn't work well under Linux\n" +
-					"\tat this moment, so you might want to disable it",
-				Hidden: true,
+					"\tat this moment, so you might want to disable it\n\t",
 			},
 			&cli.IntFlag{
 				Name:    defs.OptionConcurrent,
@@ -119,8 +118,8 @@ func main() {
 			&cli.StringSliceFlag{
 				Name:    defs.OptionProvince,
 				Aliases: []string{defs.OptionProvinceAlt},
-				Usage: "Specify a `PROVINCE` ID or Code to test against. Can be supplied\n" +
-					"\tmultiple times.",
+				Usage: "Specify a `PROVINCE` ID or Code to test against. Can be\n" +
+					"\tsupplied multiple times.",
 				Hidden: true,
 			},
 			&cli.StringSliceFlag{
@@ -136,8 +135,9 @@ func main() {
 					"\tmultiple times. Cannot be used with --server",
 			},
 			&cli.StringFlag{
-				Name:  defs.OptionSource,
-				Usage: "`SOURCE` IP address to bind to, will not obey when fetch servers list",
+				Name: defs.OptionSource,
+				Usage: "`SOURCE` IP address to bind to, will not obey when\n" +
+					"\tfetch server list",
 			},
 			&cli.StringFlag{
 				Name:    defs.OptionInterface,
