@@ -7,23 +7,23 @@ import (
 
 // JSONReport represents the output data fields in a JSON file
 type JSONReport struct {
-	Timestamp     time.Time           `json:"timestamp"`
-	Server        Server              `json:"server"`
-	Client        defs.IPInfoResponse `json:"client"`
-	BytesSent     uint64              `json:"bytes_sent"`
-	BytesReceived uint64              `json:"bytes_received"`
-	Ping          float64             `json:"ping"`
-	Jitter        float64             `json:"jitter"`
-	Upload        float64             `json:"upload"`
-	Download      float64             `json:"download"`
+	Client  defs.IPInfoResponse `json:"client"`
+	Results []Result            `json:"results"`
 }
 
-// Server represents the speed test server's information
-type Server struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	IP       string `json:"ip"`
-	Province string `json:"province"`
-	City     string `json:"city"`
-	ISP      string `json:"isp"`
+// Result represents the test's information
+type Result struct {
+	ID            string    `json:"id" csv:"ID"`
+	Name          string    `json:"name" csv:"Name"`
+	IP            string    `json:"ip" csv:"IP"`
+	Province      string    `json:"province" csv:"Province"`
+	City          string    `json:"city" csv:"City"`
+	ISP           string    `json:"isp" csv:"ISP"`
+	Timestamp     time.Time `json:"timestamp" csv:"Timestamp"`
+	BytesSent     uint64    `json:"bytes_sent" csv:"Sent"`
+	BytesReceived uint64    `json:"bytes_received" csv:"Received"`
+	Ping          float64   `json:"ping" csv:"Ping"`
+	Jitter        float64   `json:"jitter" csv:"Jitter"`
+	Upload        float64   `json:"upload" csv:"Upload"`
+	Download      float64   `json:"download" csv:"Download"`
 }

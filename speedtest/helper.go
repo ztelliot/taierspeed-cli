@@ -121,8 +121,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 		}
 	}
 
-	var repsJson []report.JSONReport
-	var repsCsv []report.CSVReport
+	var repsOut []report.Result
 
 	// fetch current user's IP info
 	for _, currentServer := range servers {
@@ -222,23 +221,8 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			}
 
 			// check for --csv or --json. the program prioritize the --csv before the --json. this is the same behavior as speedtest-cli
-			if c.Bool(defs.OptionCSV) {
-				// print csv if --csv is given
-				var rep report.CSVReport
-				rep.Timestamp = time.Now()
-
-				rep.Name = currentServer.Name
-				rep.Address = currentServer.IP
-				rep.Ping = math.Round(p*100) / 100
-				rep.Jitter = math.Round(jitter*100) / 100
-				rep.Download = math.Round(downloadValue*100) / 100
-				rep.Upload = math.Round(uploadValue*100) / 100
-				rep.IP = ispInfo.IP
-
-				repsCsv = append(repsCsv, rep)
-			} else if c.Bool(defs.OptionJSON) {
-				// print json if --json is given
-				var rep report.JSONReport
+			if c.Bool(defs.OptionCSV) || c.Bool(defs.OptionJSON) {
+				var rep report.Result
 				rep.Timestamp = time.Now()
 
 				rep.Ping = math.Round(p*100) / 100
@@ -248,21 +232,19 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 				rep.BytesReceived = bytesRead
 				rep.BytesSent = bytesWritten
 
-				rep.Server.ID = currentServer.GetID()
+				rep.ID = currentServer.GetID()
 				switch network {
 				case "ip6":
-					rep.Server.IP = currentServer.IPv6
+					rep.IP = currentServer.IPv6
 				default:
-					rep.Server.IP = currentServer.IP
+					rep.IP = currentServer.IP
 				}
-				rep.Server.Name = currentServer.Name
-				rep.Server.Province = currentServer.ProvinceInfo.Short
-				rep.Server.City = currentServer.City
-				rep.Server.ISP = currentServer.ISP.Name
+				rep.Name = currentServer.Name
+				rep.Province = currentServer.ProvinceInfo.Short
+				rep.City = currentServer.City
+				rep.ISP = currentServer.ISP.Name
 
-				rep.Client = *ispInfo
-
-				repsJson = append(repsJson, rep)
+				repsOut = append(repsOut, rep)
 			}
 		} else {
 			log.Infof("Selected server %s (%s) is not responding at the moment, try again later", currentServer.Name, currentServer.GetID())
@@ -277,13 +259,13 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 	// check for --csv or --json. the program prioritize the --csv before the --json. this is the same behavior as speedtest-cli
 	if c.Bool(defs.OptionCSV) {
 		var buf bytes.Buffer
-		if err := gocsv.MarshalWithoutHeaders(&repsCsv, &buf); err != nil {
+		if err := gocsv.MarshalWithoutHeaders(&repsOut, &buf); err != nil {
 			log.Errorf("Error generating CSV report: %s", err)
 		} else {
 			os.Stdout.WriteString(buf.String())
 		}
 	} else if c.Bool(defs.OptionJSON) {
-		if b, err := json.Marshal(&repsJson); err != nil {
+		if b, err := json.Marshal(&report.JSONReport{Client: *ispInfo, Results: repsOut}); err != nil {
 			log.Errorf("Error generating JSON report: %s", err)
 		} else {
 			os.Stdout.Write(b[:])

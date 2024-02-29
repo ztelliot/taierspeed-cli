@@ -86,8 +86,8 @@ func main() {
 			},
 			&cli.BoolFlag{
 				Name: defs.OptionCSV,
-				Usage: "Suppress verbose output, only show basic information in CSV\n" +
-					"\tformat. Speeds listed in bit/s and not affected by --bytes\n\t",
+				Usage: "Suppress verbose output. Speeds listed in bit/s and not\n" +
+					"\taffected by --bytes",
 			},
 			&cli.StringFlag{
 				Name: defs.OptionCSVDelimiter,
@@ -161,6 +161,7 @@ func main() {
 				Aliases: []string{defs.OptionDurationAlt},
 				Usage:   "Upload and download test duration in seconds",
 				Value:   15,
+				Hidden:  true,
 			},
 			&cli.IntFlag{
 				Name:   defs.OptionUploadSize,

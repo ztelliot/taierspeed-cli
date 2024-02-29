@@ -25,10 +25,10 @@ var (
 
 type IPInfoResponse struct {
 	IP       string `json:"ip"`
-	District string `json:"district"`
-	City     string `json:"city"`
-	Region   string `json:"region"`
 	Country  string `json:"country"`
+	Region   string `json:"region"`
+	City     string `json:"city"`
+	District string `json:"district,omitempty"`
 	Isp      string `json:"isp"`
 }
 
