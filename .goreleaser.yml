@@ -74,4 +74,10 @@ release:
     owner: ztelliot
     name: taierspeed-cli
   disable: false
+blobs:
+  - provider: s3
+    bucket: "{{ .Env.S3_BUCKET }}"
+    region: "{{ .Env.S3_REGION }}"
+    endpoint: "{{ .Env.S3_ENDPOINT }}"
+    folder: "taierspeed/{{.Version}}"
 
