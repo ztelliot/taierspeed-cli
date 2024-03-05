@@ -1,0 +1,23 @@
+kind: pipeline
+type: kubernetes
+name: default
+metadata:
+  namespace: gitea
+steps:
+  - name: fetch
+    image: alpine/git
+    commands:
+      - git fetch --tags
+  - name: release
+    image: goreleaser/goreleaser
+    commands:
+      - goreleaser release
+    environment:
+      GITEA_URL:
+        from_secret: gitea_url
+      GITEA_TOKEN:
+        from_secret: gitea_token
+trigger:
+  event:
+  - tag
+
