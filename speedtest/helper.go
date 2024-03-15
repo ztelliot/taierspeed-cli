@@ -71,7 +71,7 @@ func enQueue(s defs.Server) string {
 }
 
 func deQueue(s defs.Server, key string) bool {
-	url := fmt.Sprintf("%sspeed/dovalid?key=%s", s.URL, key)
+	url := fmt.Sprintf("%sdovalid?key=%s", s.URL, key)
 
 	req, err := http.NewRequest(http.MethodPost, url, nil)
 	if err != nil {
@@ -240,7 +240,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 					rep.IP = currentServer.IP
 				}
 				rep.Name = currentServer.Name
-				rep.Province = currentServer.ProvinceInfo.Short
+				rep.Province = currentServer.Province.Short
 				rep.City = currentServer.City
 				rep.ISP = currentServer.ISP.Name
 

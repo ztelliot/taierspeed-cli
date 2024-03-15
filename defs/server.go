@@ -65,6 +65,37 @@ func (s *ServerGlobal) GetISP() *ISPInfo {
 	}
 }
 
+type ServerPerception struct {
+	ID          int    `json:"id"`
+	Name        string `json:"server_name"`
+	IP          string `json:"server_ip"`
+	Prov        string `json:"province"`
+	City        string `json:"city"`
+	ISP         string `json:"operator_id"`
+	DownloadURL string `json:"http_downloadUrl"`
+	UploadURL   string `json:"http_uploadUrl"`
+	PingURL     string `json:"ping_url"`
+	HwType      uint8  `json:"hw_type"`
+	Type        uint8  `json:"protocol_type"`
+}
+
+func (s *ServerPerception) GetISP() *ISPInfo {
+	switch s.ISP {
+	case "0":
+		return &MOBILE
+	case "1":
+		return &TELECOM
+	case "3":
+		return &UNICOM
+	case "5":
+		return &CERNET
+	case "6":
+		return &CATV
+	default:
+		return &DEFISP
+	}
+}
+
 type ServerWireless struct {
 	ID    int    `json:"s_id"`
 	Name  string `json:"s_name"`
@@ -100,30 +131,20 @@ const (
 
 // Server represents a speed test server
 type Server struct {
-	ID   int    `json:"id"`
-	Name string `json:"server_name"`
-	IP   string `json:"server_ip"`
-	IPv6 string `json:"-"`
-
-	Province     string        `json:"province"`
-	ProvinceInfo *ProvinceInfo `json:"-"`
-	City         string        `json:"city"`
-	Operator     string        `json:"operator_id"`
-	ISP          *ISPInfo      `json:"-"`
-
-	URL         string `json:"-"`
-	URLv6       string `json:"-"`
-	DownloadURL string `json:"http_downloadUrl"`
-	UploadURL   string `json:"http_uploadUrl"`
-	PingURL     string `json:"ping_url"`
-	HwType      int    `json:"hw_type"`
-
-	NoICMP bool       `json:"-"`
-	Type   ServerType `json:"protocol_type"`
-}
-
-func (s *Server) SetProvince(provinces *[]ProvinceInfo) {
-	s.ProvinceInfo = MatchProvince(s.Province, provinces)
+	ID          int
+	Name        string
+	IP          string
+	IPv6        string
+	Province    *ProvinceInfo
+	City        string
+	ISP         *ISPInfo
+	URL         string
+	URLv6       string
+	DownloadURL string
+	UploadURL   string
+	PingURL     string
+	NoICMP      bool
+	Type        ServerType
 }
 
 func (s *Server) GetID() string {

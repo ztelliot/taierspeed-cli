@@ -1,7 +1,6 @@
 package speedtest
 
 import (
-	"bytes"
 	"context"
 	"crypto/des"
 	_ "embed"
@@ -67,28 +66,6 @@ func GetRandom(tok, pre string, l int) string {
 	return pre + string(res)
 }
 
-func Encrypt(src, key string) string {
-	data := []byte(src)
-	keyByte := []byte(key)
-	block, err := des.NewCipher(keyByte)
-	if err != nil {
-		panic(err)
-	}
-	bs := block.BlockSize()
-	data = PKCS5Padding(data, bs)
-	if len(data)%bs != 0 {
-		panic("Need a multiple of the blocksize")
-	}
-	out := make([]byte, len(data))
-	dst := out
-	for len(data) > 0 {
-		block.Encrypt(dst, data[:bs])
-		data = data[bs:]
-		dst = dst[bs:]
-	}
-	return hex.EncodeToString(out)
-}
-
 func Decrypt(src, key string) []byte {
 	data, err := hex.DecodeString(src)
 	if err != nil {
@@ -111,12 +88,6 @@ func Decrypt(src, key string) []byte {
 		dst = dst[bs:]
 	}
 	return PKCS5UnPadding(out)
-}
-
-func PKCS5Padding(ciphertext []byte, blockSize int) []byte {
-	padding := blockSize - len(ciphertext)%blockSize
-	padtext := bytes.Repeat([]byte{byte(padding)}, padding)
-	return append(ciphertext, padtext...)
 }
 
 func PKCS5UnPadding(origData []byte) []byte {
@@ -277,30 +248,17 @@ func SpeedTest(c *cli.Context) error {
 	log.Infof("Retrieving server list")
 
 	if !c.Bool(defs.OptionDisableTai) && !forceIPv6 && hasGlobal {
-		var serversT []defs.ServerGlobal
+		var serversT []defs.Server
 
-		if isCN {
-			serversT, err = getGlobalServerList(ispInfo.IP)
-			for _, s := range serversT {
-				isp := s.GetISP()
-				if len(isps) <= 0 || checkISP(isps, isp) {
-					target := fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
-					servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, URL: target, Name: s.Name, Province: s.Prov, ProvinceInfo: s.GetProvince(&provinces), City: s.City, ISP: isp})
-				}
-			}
-		} else {
-			if err := json.Unmarshal(ServerListByte, &serversT); err == nil {
-				for _, s := range serversT {
-					isp := s.GetISP()
-					prov := s.GetProvince(&provinces)
-					if (len(provs) <= 0 || checkProv(provs, prov)) && (len(isps) <= 0 || checkISP(isps, isp)) {
-						target := fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
-						servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, URL: target, Name: s.Name, Province: s.Prov, ProvinceInfo: s.GetProvince(&provinces), City: s.City, ISP: isp})
-					}
-				}
-				servers, err = preprocessServers(servers, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList))
-			}
+		if serversT, err = getGlobalServerList(isCN, ispInfo, isps, &provs, &provinces); err != nil {
+			log.Errorf("Error when fetching server list: %s", err)
+			return err
 		}
+		if serversT, err = preprocessServers(serversT, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList)); err != nil {
+			log.Errorf("Error when preprocessing server list: %s", err)
+			return err
+		}
+		servers = append(servers, serversT...)
 	}
 
 	if !c.Bool(defs.OptionDisablePet) && !(isCN && len(servers) > 0) && hasPerception {
@@ -315,7 +273,14 @@ func SpeedTest(c *cli.Context) error {
 				serversP = append(serversP, serversPT...)
 			}
 		}
-		serversP, err = preprocessServers(serversP, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList))
+		if err != nil {
+			log.Errorf("Error when fetching server list: %s", err)
+			return err
+		}
+		if serversP, err = preprocessServers(serversP, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList)); err != nil {
+			log.Errorf("Error when preprocessing server list: %s", err)
+			return err
+		}
 		servers = append(servers, serversP...)
 	}
 
@@ -324,16 +289,22 @@ func SpeedTest(c *cli.Context) error {
 			var serversW []defs.Server
 			var serversWT []defs.ServerWireless
 
-			if err := json.Unmarshal(GDServerListByte, &serversWT); err == nil {
+			if err = json.Unmarshal(GDServerListByte, &serversWT); err == nil {
 				for _, s := range serversWT {
 					isp := s.GetISP()
 					if len(isps) <= 0 || checkISP(isps, isp) {
-						serversW = append(serversW, defs.Server{ID: s.ID, Name: s.Name, IP: s.IP, IPv6: s.IPv6, URL: s.URL, URLv6: s.URLv6, Province: s.Prov, ProvinceInfo: &defs.GUANGDONG, City: s.City, ISP: isp, Type: defs.WirelessSpeed})
+						serversW = append(serversW, defs.Server{ID: s.ID, Name: s.Name, IP: s.IP, IPv6: s.IPv6, URL: s.URL, URLv6: s.URLv6, Province: &defs.GUANGDONG, City: s.City, ISP: isp, Type: defs.WirelessSpeed})
 					}
 				}
+			} else {
+				log.Errorf("Error when fetching server list: %s", err)
+				return err
 			}
 
-			serversW, err = preprocessServers(serversW, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList))
+			if serversW, err = preprocessServers(serversW, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList)); err != nil {
+				log.Errorf("Error when preprocessing server list: %s", err)
+				return err
+			}
 			servers = append(servers, serversW...)
 		}
 	}
@@ -370,7 +341,7 @@ func SpeedTest(c *cli.Context) error {
 			if svr.IPv6 != "" {
 				stacks = append(stacks, "IPv6")
 			}
-			fmt.Printf("%s: %s (%s%s) %v\n", svr.GetID(), svr.Name, svr.ProvinceInfo.Short, svr.ISP.Name, stacks)
+			fmt.Printf("%s: %s (%s%s) %v\n", svr.GetID(), svr.Name, svr.Province.Short, svr.ISP.Name, stacks)
 		}
 		return nil
 	}
@@ -534,7 +505,7 @@ func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGro
 // getPerceptionServerList fetches the server JSON from perception
 func getPerceptionServerList(prov *defs.ProvinceInfo, isps []*defs.ISPInfo, provinces *[]defs.ProvinceInfo) ([]defs.Server, error) {
 	// getting the server list from remote
-	var servers []defs.Server
+	var servers []defs.ServerPerception
 	var uri string
 	old := false
 
@@ -603,44 +574,29 @@ func getPerceptionServerList(prov *defs.ProvinceInfo, isps []*defs.ISPInfo, prov
 		if s.Type == 1 || s.HwType == 1 {
 			continue
 		}
-		s.SetProvince(provinces)
-		switch s.Operator {
-		case "0":
-			s.ISP = &defs.MOBILE
-		case "1":
-			s.ISP = &defs.TELECOM
-		case "3":
-			s.ISP = &defs.UNICOM
-		case "5":
-			s.ISP = &defs.CERNET
-		case "6":
-			s.ISP = &defs.CATV
-		default:
-			s.ISP = &defs.DEFISP
-		}
-		s.Type = defs.Perception
+		server := defs.Server{ID: s.ID, Name: s.Name, IP: s.IP, DownloadURL: s.DownloadURL, UploadURL: s.UploadURL, PingURL: s.PingURL, Province: defs.MatchProvince(s.Prov, provinces), City: s.City, ISP: s.GetISP(), Type: defs.Perception}
 		if downloadUrl, err := url.Parse(s.DownloadURL); err == nil {
 			host := downloadUrl.Hostname()
-			s.URL = host
+			server.URL = host
 			if DomainRe.MatchString(host) {
 				if records, err := net.LookupHost(host); err == nil {
 					for _, i := range records {
 						if strings.Contains(i, ":") {
-							s.IPv6 = i
+							server.IPv6 = i
 						} else {
-							s.IP = i
+							server.IP = i
 						}
 					}
 				}
 			}
 		}
-		serversResolved = append(serversResolved, s)
+		serversResolved = append(serversResolved, server)
 	}
 
 	var serversFiltered []defs.Server
 	if prov != nil || len(isps) > 0 {
 		for _, s := range serversResolved {
-			if (prov != nil && prov.ID == s.ProvinceInfo.ID && (len(isps) <= 0 || checkISP(isps, s.ISP))) || (len(isps) > 0 && checkISP(isps, s.ISP) && (prov == nil || prov.ID == s.ProvinceInfo.ID)) {
+			if (prov != nil && prov.ID == s.Province.ID && (len(isps) <= 0 || checkISP(isps, s.ISP))) || (len(isps) > 0 && checkISP(isps, s.ISP) && (prov == nil || prov.ID == s.Province.ID)) {
 				serversFiltered = append(serversFiltered, s)
 			}
 		}
@@ -650,31 +606,48 @@ func getPerceptionServerList(prov *defs.ProvinceInfo, isps []*defs.ISPInfo, prov
 	return serversResolved, nil
 }
 
-func getGlobalServerList(ip string) ([]defs.ServerGlobal, error) {
-	uri := fmt.Sprintf("%s/dataServer/mobilematch_list.php?ip=%s&network=4&ipv6=0", apiBaseUrl, ip)
-	req, err := http.NewRequest(http.MethodGet, uri, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", defs.AndroidUA)
+func getGlobalServerList(isCN bool, isp *defs.IPInfoResponse, isps []*defs.ISPInfo, provs, provinces *[]defs.ProvinceInfo) ([]defs.Server, error) {
+	var servers []defs.ServerGlobal
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var s []defs.ServerGlobal
-	if err := json.Unmarshal(b, &s); err == nil {
-		return s, nil
+	if !isCN || isp == nil {
+		if err := json.Unmarshal(ServerListByte, &servers); err != nil {
+			return nil, err
+		}
 	} else {
-		return nil, err
+		uri := fmt.Sprintf("%s/dataServer/mobilematch_list.php?ip=%s&network=4&ipv6=0", apiBaseUrl, isp.IP)
+		req, err := http.NewRequest(http.MethodGet, uri, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("User-Agent", defs.AndroidUA)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		b, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		if err = json.Unmarshal(b, &servers); err != nil {
+			return nil, err
+		}
 	}
+
+	var serversResolved []defs.Server
+
+	for _, s := range servers {
+		isp := s.GetISP()
+		prov := s.GetProvince(provinces)
+		if (provs == nil || len(*provs) <= 0 || checkProv(*provs, prov)) && (len(isps) <= 0 || checkISP(isps, isp)) {
+			url := fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
+			serversResolved = append(serversResolved, defs.Server{ID: s.ID, IP: s.IP, URL: url, Name: s.Name, Province: s.GetProvince(provinces), City: s.City, ISP: isp})
+		}
+	}
+	return serversResolved, nil
 }
 
 // preprocessServers makes some needed modifications to the servers fetched
