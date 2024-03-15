@@ -66,17 +66,15 @@ func (s *ServerGlobal) GetISP() *ISPInfo {
 }
 
 type ServerWireless struct {
-	ID     int    `json:"s_id"`
-	Name   string `json:"s_name"`
-	IP     string `json:"s_ip"`
-	IPv6   string `json:"s_ipv6"`
-	URL    string `json:"s_url"`
-	URLs   string `json:"s_url_https"`
-	URLv6  string `json:"s_url_ipv6"`
-	County string `json:"s_county"`
-	City   string `json:"s_city"`
-	Prov   string `json:"s_province"`
-	ISP    int    `json:"s_operator"`
+	ID    int    `json:"s_id"`
+	Name  string `json:"s_name"`
+	IP    string `json:"s_ip"`
+	IPv6  string `json:"s_ipv6"`
+	URL   string `json:"s_url"`
+	URLv6 string `json:"s_url_ipv6"`
+	City  string `json:"s_city"`
+	Prov  string `json:"s_province"`
+	ISP   int    `json:"s_operator"`
 }
 
 func (s *ServerWireless) GetISP() *ISPInfo {
@@ -106,7 +104,6 @@ type Server struct {
 	Name string `json:"server_name"`
 	IP   string `json:"server_ip"`
 	IPv6 string `json:"-"`
-	Port string `json:"-"`
 
 	Province     string        `json:"province"`
 	ProvinceInfo *ProvinceInfo `json:"-"`
@@ -159,7 +156,7 @@ func (s *Server) IsUp(network string) bool {
 			target = s.URL
 		}
 	default:
-		target = fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
+		target = s.URL
 	}
 
 	req, err := http.NewRequest(http.MethodGet, target, nil)
@@ -280,7 +277,7 @@ func (s *Server) PingAndJitter(count int, network string) (float64, float64, err
 			target = s.URL
 		}
 	default:
-		target = fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
+		target = s.URL
 	}
 
 	var pings []float64
@@ -354,7 +351,7 @@ func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration
 		}
 		uri = fmt.Sprintf("%s/download", uri)
 	default:
-		uri = fmt.Sprintf("http://%s:%s/speed/File(1G).dl?key=%s", s.IP, s.Port, token)
+		uri = fmt.Sprintf("%sFile(1G).dl?key=%s", s.URL, token)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
@@ -462,7 +459,7 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, up
 		}
 		uri = fmt.Sprintf("%s/upload", uri)
 	default:
-		uri = fmt.Sprintf("http://%s:%s/speed/doAnalsLoad.do", s.IP, s.Port)
+		uri = fmt.Sprintf("%sdoAnalsLoad.do", s.URL)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, counter)

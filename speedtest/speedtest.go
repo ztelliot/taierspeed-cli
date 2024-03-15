@@ -31,7 +31,6 @@ import (
 const (
 	apiBaseUrl           = `https://dlc.cnspeedtest.com:8043`
 	apiPerceptionBaseUrl = `https://ux.caict.ac.cn`
-	apiWirelessBaseUrl   = `https://gw2.gdspeed.cn:9090`
 )
 
 var DomainRe = regexp.MustCompile(`([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.)+([a-zA-Z][-a-zA-Z]{0,62})`)
@@ -41,6 +40,9 @@ var ServerListByte []byte
 
 //go:embed province.csv
 var ProvinceListByte []byte
+
+//go:embed gdserverlist.json
+var GDServerListByte []byte
 
 type PingJob struct {
 	Index  int
@@ -307,15 +309,16 @@ func SpeedTest(c *cli.Context) error {
 	// fetch the server list JSON and parse it into the `servers` array
 	log.Infof("Retrieving server list")
 
-	var serversT []defs.ServerGlobal
-
 	if !c.Bool(defs.OptionDisableTai) && !forceIPv6 && hasGlobal {
+		var serversT []defs.ServerGlobal
+
 		if isCN {
 			serversT, err = getGlobalServerList(ispInfo.IP)
 			for _, s := range serversT {
 				isp := s.GetISP()
 				if len(isps) <= 0 || checkISP(isps, isp) {
-					servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, ProvinceInfo: s.GetProvince(&provinces), City: s.City, ISP: isp})
+					target := fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
+					servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, URL: target, Name: s.Name, Province: s.Prov, ProvinceInfo: s.GetProvince(&provinces), City: s.City, ISP: isp})
 				}
 			}
 		} else {
@@ -324,7 +327,8 @@ func SpeedTest(c *cli.Context) error {
 					isp := s.GetISP()
 					prov := s.GetProvince(&provinces)
 					if (len(provs) <= 0 || checkProv(provs, prov)) && (len(isps) <= 0 || checkISP(isps, isp)) {
-						servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, Port: s.Port, Name: s.Name, Province: s.Prov, ProvinceInfo: s.GetProvince(&provinces), City: s.City, ISP: isp})
+						target := fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
+						servers = append(servers, defs.Server{ID: s.ID, IP: s.IP, URL: target, Name: s.Name, Province: s.Prov, ProvinceInfo: s.GetProvince(&provinces), City: s.City, ISP: isp})
 					}
 				}
 				servers, err = preprocessServers(servers, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList))
@@ -332,10 +336,10 @@ func SpeedTest(c *cli.Context) error {
 		}
 	}
 
-	var serversP []defs.Server
-	var serversPT []defs.Server
-
 	if !c.Bool(defs.OptionDisablePet) && !(isCN && len(servers) > 0) && hasPerception {
+		var serversP []defs.Server
+		var serversPT []defs.Server
+
 		if len(provs) <= 0 {
 			serversP, err = getPerceptionServerList(nil, isps, &provinces)
 		} else {
@@ -348,11 +352,20 @@ func SpeedTest(c *cli.Context) error {
 		servers = append(servers, serversP...)
 	}
 
-	var serversW []defs.Server
-
 	if !c.Bool(defs.OptionDisableWir) && !(isCN && len(servers) > 0) && hasWireless {
 		if len(provs) <= 0 || checkProv(provs, &defs.GUANGDONG) {
-			serversW, err = getWirelessServerList(&provinces, isps)
+			var serversW []defs.Server
+			var serversWT []defs.ServerWireless
+
+			if err := json.Unmarshal(GDServerListByte, &serversWT); err == nil {
+				for _, s := range serversWT {
+					isp := s.GetISP()
+					if len(isps) <= 0 || checkISP(isps, isp) {
+						serversW = append(serversW, defs.Server{ID: s.ID, Name: s.Name, IP: s.IP, IPv6: s.IPv6, URL: s.URL, URLv6: s.URLv6, Province: s.Prov, ProvinceInfo: &defs.GUANGDONG, City: s.City, ISP: isp, Type: defs.WirelessSpeed})
+					}
+				}
+			}
+
 			serversW, err = preprocessServers(serversW, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList))
 			servers = append(servers, serversW...)
 		}
@@ -695,65 +708,6 @@ func getGlobalServerList(ip string) ([]defs.ServerGlobal, error) {
 	} else {
 		return nil, err
 	}
-}
-
-func getWirelessServerList(provinces *[]defs.ProvinceInfo, isps []*defs.ISPInfo) ([]defs.Server, error) {
-	uri := fmt.Sprintf("%s/GSpeedTestCloud/test/broadbandAccessResource.action", apiWirelessBaseUrl)
-	var data = defs.GDPayload{Nonce: GetRandom("", "", 16)}
-	data.Init()
-
-	payload, err := json.Marshal(data)
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequest(http.MethodPost, uri, bytes.NewBuffer(payload))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
-	req.Header.Set("User-Agent", defs.BrowserUA)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var res map[string]json.RawMessage
-	if err := json.Unmarshal(b, &res); err != nil {
-		return nil, err
-	}
-
-	var servers []defs.Server
-	type Data struct {
-		Province  string
-		Resources []defs.ServerWireless
-	}
-	var ret struct{ Datas []Data }
-	if string(res["ret_code"]) == "0" {
-		if err := json.Unmarshal(res["ret"], &ret); err != nil {
-			return nil, err
-		}
-	} else {
-		return nil, errors.New(string(res["ret_msg"]))
-	}
-
-	for _, d := range ret.Datas {
-		prov := defs.MatchProvince(d.Province, provinces)
-		for _, r := range d.Resources {
-			isp := r.GetISP()
-			if len(isps) <= 0 || checkISP(isps, isp) {
-				servers = append(servers, defs.Server{ID: r.ID, Name: r.Name, IP: r.IP, IPv6: r.IPv6, URL: r.URL, URLv6: r.URLv6, Province: r.Prov, ProvinceInfo: prov, City: r.City, ISP: isp, Type: defs.WirelessSpeed})
-			}
-		}
-	}
-
-	return servers, nil
 }
 
 // preprocessServers makes some needed modifications to the servers fetched

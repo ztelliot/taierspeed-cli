@@ -36,7 +36,7 @@ func enQueue(s defs.Server) string {
 	md5Ctx.Write([]byte(fmt.Sprintf("model=Android&imei=%s&stime=%s", imei, ts)))
 	token := hex.EncodeToString(md5Ctx.Sum(nil))
 
-	url := fmt.Sprintf("http://%s:%s/speed/dovalid?key=&flag=true&bandwidth=200&model=Android&imei=%s&time=%s&token=%s", s.IP, s.Port, imei, ts, token)
+	url := fmt.Sprintf("%sdovalid?key=&flag=true&bandwidth=200&model=Android&imei=%s&time=%s&token=%s", s.URL, imei, ts, token)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -71,7 +71,7 @@ func enQueue(s defs.Server) string {
 }
 
 func deQueue(s defs.Server, key string) bool {
-	url := fmt.Sprintf("http://%s:%s/speed/dovalid?key=%s", s.IP, s.Port, key)
+	url := fmt.Sprintf("%sspeed/dovalid?key=%s", s.URL, key)
 
 	req, err := http.NewRequest(http.MethodPost, url, nil)
 	if err != nil {
