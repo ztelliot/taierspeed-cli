@@ -116,11 +116,7 @@ type Server struct {
 	DownloadURL string `json:"http_downloadUrl"`
 	UploadURL   string `json:"http_uploadUrl"`
 	PingURL     string `json:"ping_url"`
-
-	HwType            int    `json:"hw_type"`
-	HwPingHeaders     string `json:"hw_httpPingHeaders"`
-	HwDownloadHeaders string `json:"hw_httpDlHeaders"`
-	HwUploadHeaders   string `json:"hw_httpUlHeaders"`
+	HwType      int    `json:"hw_type"`
 
 	NoICMP bool       `json:"-"`
 	Type   ServerType `json:"protocol_type"`
@@ -165,12 +161,7 @@ func (s *Server) IsUp(network string) bool {
 		return false
 	}
 
-	if s.HwType == 1 {
-		req.Host = s.HwPingHeaders
-		req.Header.Set("User-Agent", GenexUA)
-	} else {
-		req.Header.Set("User-Agent", AndroidUA)
-	}
+	req.Header.Set("User-Agent", AndroidUA)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -287,12 +278,8 @@ func (s *Server) PingAndJitter(count int, network string) (float64, float64, err
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
 	}
-	if s.HwType == 1 {
-		req.Host = s.HwPingHeaders
-		req.Header.Set("User-Agent", GenexUA)
-	} else {
-		req.Header.Set("User-Agent", AndroidUA)
-	}
+
+	req.Header.Set("User-Agent", AndroidUA)
 
 	for i := 0; i < count; i++ {
 		start := time.Now()
@@ -360,14 +347,9 @@ func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration
 		return 0, 0, err
 	}
 
-	if s.HwType == 1 {
-		req.Host = s.HwDownloadHeaders
-		req.Header.Set("User-Agent", GenexUA)
-	} else {
-		req.Header.Set("User-Agent", BrowserUA)
-		req.Header.Set("Accept", "*/*")
-		req.Header.Set("Connection", "close")
-	}
+	req.Header.Set("User-Agent", BrowserUA)
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Connection", "close")
 
 	downloadDone := make(chan struct{}, requests)
 
@@ -468,19 +450,14 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, up
 		return 0, 0, err
 	}
 
-	if s.HwType == 1 {
-		req.Host = s.HwUploadHeaders
-		req.Header.Set("User-Agent", GenexUA)
+	req.Header.Set("User-Agent", AndroidUA)
+	if s.Type != WirelessSpeed {
+		req.Header.Set("Connection", "close")
+		req.Header.Set("Charset", "UTF-8")
+		req.Header.Set("Key", token)
+		req.Header.Set("Content-Type", "multipart/form-data;boundary=00content0boundary00")
 	} else {
-		req.Header.Set("User-Agent", AndroidUA)
-		if s.Type != WirelessSpeed {
-			req.Header.Set("Connection", "close")
-			req.Header.Set("Charset", "UTF-8")
-			req.Header.Set("Key", token)
-			req.Header.Set("Content-Type", "multipart/form-data;boundary=00content0boundary00")
-		} else {
-			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 
 	uploadDone := make(chan struct{}, requests)

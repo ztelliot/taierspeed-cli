@@ -18,7 +18,6 @@ var (
 	DeviceID    = "b721c5a0dba37004"
 	Model       = "NE2210"
 	OS          = "Android 14"
-	GenexUA     = fmt.Sprintf("com.huawei.genexcloud.speedtest/4.6.0.302 (Linux; %s; %s) RestClient/6.0.6.300", OS, Model)
 	AndroidUA   = fmt.Sprintf("Dalvik/2.1.0 (Linux; U; %s; %s Build/TP1A.220624.014)", OS, Model)
 	BrowserUA   = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.60 Safari/537.36"
 )

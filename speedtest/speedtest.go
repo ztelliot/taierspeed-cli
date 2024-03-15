@@ -125,39 +125,6 @@ func PKCS5UnPadding(origData []byte) []byte {
 	return origData[:(length - unpadding)]
 }
 
-func Register() (string, error) {
-	did := GetRandom("0123456789abcdef", "", 16)
-	key := GetRandom("0123456789", "taier", 6)
-	pl := Encrypt(fmt.Sprintf("{\"deviceId\": \"%s\"}", did), key[:8])
-	uri := fmt.Sprintf("%s/screen/taier/app/equipment/info?deviceId=%s&key=%s&json=%s", apiPerceptionBaseUrl, did, key, pl)
-
-	req, err := http.NewRequest(http.MethodPost, uri, nil)
-	if err != nil {
-		log.Debugf("Failed when creating HTTP request: %s", err)
-		return "", err
-	}
-	req.Header.Set("User-Agent", defs.AndroidUA)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Debugf("Failed when making HTTP request: %s", err)
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Debugf("Failed when reading HTTP response: %s", err)
-		return "", err
-	}
-
-	if len(b) <= 0 {
-		return "", err
-	}
-
-	return did, nil
-}
-
 // SpeedTest is the actual main function that handles the speed test(s)
 func SpeedTest(c *cli.Context) error {
 	// check for suppressed output flags
@@ -633,7 +600,7 @@ func getPerceptionServerList(prov *defs.ProvinceInfo, isps []*defs.ISPInfo, prov
 
 	var serversResolved []defs.Server
 	for _, s := range servers {
-		if s.Type == 1 {
+		if s.Type == 1 || s.HwType == 1 {
 			continue
 		}
 		s.SetProvince(provinces)
