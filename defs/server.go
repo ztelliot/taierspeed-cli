@@ -94,6 +94,24 @@ func (s *ServerPerception) GetISP() *ISPInfo {
 	}
 }
 
+func (s *ServerPerception) GetCity(prov *ProvinceInfo) string {
+	city := strings.TrimSuffix(s.City, s.GetISP().Name)
+	city = strings.TrimPrefix(city, prov.Short)
+	city = strings.TrimPrefix(city, prov.Name)
+	city = strings.Trim(city, "-")
+
+	if city == "" {
+		return prov.Short
+	}
+
+	if strings.Contains(city, "-") {
+		city = strings.Split(city, "-")[0]
+	}
+
+	city = strings.TrimSuffix(city, "市")
+	return city
+}
+
 type ServerWireless struct {
 	ID    int    `json:"s_id"`
 	Name  string `json:"s_name"`

@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -163,7 +164,7 @@ func SpeedTest(c *cli.Context) error {
 			op = []string{serverGroup[0]}
 		}
 		for _, p := range provinces {
-			if contains(op, p.ID) || contains(op, p.Code) {
+			if contains(op, strconv.Itoa(int(p.ID))) || contains(op, p.Code) {
 				provs = append(provs, p)
 			}
 		}
@@ -188,7 +189,7 @@ func SpeedTest(c *cli.Context) error {
 			oi = []string{serverGroup[1]}
 		}
 		for _, i := range defs.ISPList {
-			if contains(oi, i.ID) || contains(oi, i.Short) {
+			if contains(oi, i.ASN) || contains(oi, i.Short) {
 				isps = append(isps, i)
 			}
 		}
@@ -481,7 +482,8 @@ func getPerceptionServerList(prov *defs.ProvinceInfo, isps []*defs.ISPInfo, prov
 
 	var serversResolved []defs.Server
 	for _, s := range servers {
-		server := defs.Server{ID: s.ID, Name: s.Name, IP: s.IP, DownloadURL: s.DownloadURL, UploadURL: s.UploadURL, PingURL: s.PingURL, Province: defs.MatchProvince(s.Prov, provinces), City: s.City, ISP: s.GetISP(), Type: defs.Perception}
+		province := defs.MatchProvince(s.Prov, provinces)
+		server := defs.Server{ID: s.ID, Name: s.Name, IP: s.IP, DownloadURL: s.DownloadURL, UploadURL: s.UploadURL, PingURL: s.PingURL, Province: province, City: s.GetCity(province), ISP: s.GetISP(), Type: defs.Perception}
 		if downloadUrl, err := url.Parse(s.DownloadURL); err == nil {
 			host := downloadUrl.Hostname()
 			server.URL = host
@@ -599,7 +601,7 @@ func getProvInfo(provinces *[]defs.ProvinceInfo, name string) *defs.ProvinceInfo
 		prov = defs.MatchProvince(name, provinces)
 	}
 
-	if prov.ID != "" {
+	if prov.ID != 0 {
 		return prov
 	} else {
 		return &defs.GUANGDONG

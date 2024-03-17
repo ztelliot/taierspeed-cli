@@ -32,7 +32,7 @@ type IPInfoResponse struct {
 }
 
 type ProvinceInfo struct {
-	ID    string `csv:"id"`
+	ID    uint8  `csv:"id"`
 	Code  string `csv:"code"`
 	Short string `csv:"short"`
 	Name  string `csv:"name"`
@@ -41,25 +41,26 @@ type ProvinceInfo struct {
 }
 
 var (
-	GUANGDONG = ProvinceInfo{"44", "gd", "广东", "广东省", "113.266887", "23.133306"}
-	DEFPROV   = ProvinceInfo{"", "uk", "未知", "未知", "0", "0"}
+	GUANGDONG = ProvinceInfo{44, "gd", "广东", "广东省", "113.266887", "23.133306"}
+	DEFPROV   = ProvinceInfo{0, "uk", "未知", "未知", "0", "0"}
 )
 
 type ISPInfo struct {
-	ID    string
+	ID    uint8
+	ASN   string
 	Short string
 	Code  string
 	Name  string
 }
 
 var (
-	TELECOM = ISPInfo{"4134", "ct", "TELECOM", "电信"}
-	CERNET  = ISPInfo{"4538", "cernet", "CERNET", "教育网"}
-	UNICOM  = ISPInfo{"4837", "cu", "UNICOM", "联通"}
-	CATV    = ISPInfo{"7641", "catv", "CHINABTN", "广电网"}
-	MOBILE  = ISPInfo{"9808", "cm", "MOBILE", "移动"}
-	DRPENG  = ISPInfo{"17964", "drpeng", "DXTNET", "鹏博士"}
-	DEFISP  = ISPInfo{"", "uk", "UNKNOWN", "未知"}
+	TELECOM = ISPInfo{1, "4134", "ct", "TELECOM", "电信"}
+	CERNET  = ISPInfo{4, "4538", "cernet", "CERNET", "教育网"}
+	UNICOM  = ISPInfo{2, "4837", "cu", "UNICOM", "联通"}
+	CATV    = ISPInfo{5, "7641", "catv", "CHINABTN", "广电网"}
+	MOBILE  = ISPInfo{3, "9808", "cm", "MOBILE", "移动"}
+	DRPENG  = ISPInfo{6, "17964", "drpeng", "DXTNET", "鹏博士"}
+	DEFISP  = ISPInfo{0, "", "uk", "UNKNOWN", "未知"}
 	ISPList = []*ISPInfo{&TELECOM, &CERNET, &UNICOM, &CATV, &MOBILE, &DRPENG}
 )
 
