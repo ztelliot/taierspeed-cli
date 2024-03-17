@@ -2,9 +2,7 @@ package speedtest
 
 import (
 	"context"
-	"crypto/des"
 	_ "embed"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,8 +26,7 @@ import (
 )
 
 const (
-	apiBaseUrl           = `https://dlc.cnspeedtest.com:8043`
-	apiPerceptionBaseUrl = `https://ux.caict.ac.cn`
+	apiBaseUrl = `https://dlc.cnspeedtest.com:8043`
 )
 
 var DomainRe = regexp.MustCompile(`([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.)+([a-zA-Z][-a-zA-Z]{0,62})`)
@@ -42,6 +39,9 @@ var ProvinceListByte []byte
 
 //go:embed gdserverlist.json
 var GDServerListByte []byte
+
+//go:embed perserverlist.json
+var PerceptionServerListByte []byte
 
 type PingJob struct {
 	Index  int
@@ -64,36 +64,6 @@ func GetRandom(tok, pre string, l int) string {
 		res = append(res, bs[r.Intn(len(bs))])
 	}
 	return pre + string(res)
-}
-
-func Decrypt(src, key string) []byte {
-	data, err := hex.DecodeString(src)
-	if err != nil {
-		panic(err)
-	}
-	keyByte := []byte(key)
-	block, err := des.NewCipher(keyByte)
-	if err != nil {
-		panic(err)
-	}
-	bs := block.BlockSize()
-	if len(data)%bs != 0 {
-		panic("crypto/cipher: input not full blocks")
-	}
-	out := make([]byte, len(data))
-	dst := out
-	for len(data) > 0 {
-		block.Decrypt(dst, data[:bs])
-		data = data[bs:]
-		dst = dst[bs:]
-	}
-	return PKCS5UnPadding(out)
-}
-
-func PKCS5UnPadding(origData []byte) []byte {
-	length := len(origData)
-	unpadding := int(origData[length-1])
-	return origData[:(length - unpadding)]
 }
 
 // SpeedTest is the actual main function that handles the speed test(s)
@@ -504,76 +474,13 @@ func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGro
 
 // getPerceptionServerList fetches the server JSON from perception
 func getPerceptionServerList(prov *defs.ProvinceInfo, isps []*defs.ISPInfo, provinces *[]defs.ProvinceInfo) ([]defs.Server, error) {
-	// getting the server list from remote
 	var servers []defs.ServerPerception
-	var uri string
-	old := false
-
-	if prov != nil {
-		uri = fmt.Sprintf("%s/screen/taier/app/getSpeedServiceByUserId?deviceId=%s&lon=%s&lat=%s&userId=-10000&province=%s&operatorId=-1", apiPerceptionBaseUrl, defs.DeviceID, prov.Lon, prov.Lat, prov.Name)
-	} else {
-		uri = fmt.Sprintf("%s/screen/taier/ftp/encrypt/information?deviceId=%s", apiPerceptionBaseUrl, defs.DeviceID)
-		old = true
-	}
-	req, err := http.NewRequest(http.MethodGet, uri, nil)
-	req.URL.RawQuery = req.URL.Query().Encode()
-	if err != nil {
+	if err := json.Unmarshal(PerceptionServerListByte, &servers); err != nil {
 		return nil, err
-	}
-	req.Header.Set("User-Agent", defs.AndroidUA)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if old {
-		var resO map[string]json.RawMessage
-		var data []string
-		if err := json.Unmarshal(b, &resO); err != nil {
-			return nil, err
-		}
-		if err := json.Unmarshal(resO["data"], &data); err != nil {
-			return nil, err
-		}
-		if string(resO["code"]) == "\"200\"" && len(data) == 2 {
-			var res map[string]json.RawMessage
-			key := data[0]
-			data := data[1]
-			if err := json.Unmarshal(Decrypt(data, key[:8]), &res); err != nil {
-				return nil, err
-			}
-			if err := json.Unmarshal(res["ftplist"], &servers); err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, errors.New(string(resO["message"]))
-		}
-	} else {
-		var res map[string]json.RawMessage
-		if err := json.Unmarshal(b, &res); err != nil {
-			return nil, err
-		}
-		if string(res["code"]) == "\"200\"" {
-			if err := json.Unmarshal(res["data"], &servers); err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, errors.New(string(res["msg"]))
-		}
 	}
 
 	var serversResolved []defs.Server
 	for _, s := range servers {
-		if s.Type == 1 || s.HwType == 1 {
-			continue
-		}
 		server := defs.Server{ID: s.ID, Name: s.Name, IP: s.IP, DownloadURL: s.DownloadURL, UploadURL: s.UploadURL, PingURL: s.PingURL, Province: defs.MatchProvince(s.Prov, provinces), City: s.City, ISP: s.GetISP(), Type: defs.Perception}
 		if downloadUrl, err := url.Parse(s.DownloadURL); err == nil {
 			host := downloadUrl.Hostname()

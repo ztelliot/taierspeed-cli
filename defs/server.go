@@ -75,8 +75,6 @@ type ServerPerception struct {
 	DownloadURL string `json:"http_downloadUrl"`
 	UploadURL   string `json:"http_uploadUrl"`
 	PingURL     string `json:"ping_url"`
-	HwType      uint8  `json:"hw_type"`
-	Type        uint8  `json:"protocol_type"`
 }
 
 func (s *ServerPerception) GetISP() *ISPInfo {
