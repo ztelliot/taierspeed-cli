@@ -134,9 +134,15 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			return nil
 		}
 		if ispInfo != nil {
-			fmt.Printf("ISP:\t\t%s%s\n", ispInfo.City, ispInfo.ISP)
-		} else {
-			fmt.Printf("ISP:\n")
+			if ispInfo.City == "" {
+				if ispInfo.Province == "" {
+					fmt.Printf("ISP:\t\t%s%s\n", ispInfo.Country, ispInfo.ISP)
+				} else {
+					fmt.Printf("ISP:\t\t%s%s\n", ispInfo.Province, ispInfo.ISP)
+				}
+			} else {
+				fmt.Printf("ISP:\t\t%s%s\n", ispInfo.City, ispInfo.ISP)
+			}
 		}
 		if len(servers) > 1 {
 			fmt.Printf("\n")

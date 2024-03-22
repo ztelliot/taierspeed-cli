@@ -203,7 +203,6 @@ func SpeedTest(c *cli.Context) error {
 		if c.Bool(defs.OptionDebug) {
 			debugServer(&serversT, "Fetched")
 		}
-		log.Info("Selecting the fastest server based on ping")
 		servers = append(servers, selectServer(serversT, network, c, noICMP))
 	} else {
 		var groups []defs.Group
@@ -309,7 +308,6 @@ func SpeedTest(c *cli.Context) error {
 				if c.Bool(defs.OptionDebug) {
 					debugServer(&serversT, "Fetched")
 				}
-				log.Info("Selecting the fastest server based on ping")
 				servers = append(servers, selectServer(serversT, network, c, noICMP))
 			}
 		}
@@ -356,6 +354,8 @@ func selectServer(servers []defs.Server, network string, c *cli.Context, noICMP 
 			debugServer(&servers, "Randomly choice")
 		}
 	}
+
+	log.Info("Selecting the fastest server based on ping")
 
 	var wg sync.WaitGroup
 	jobs := make(chan PingJob, len(servers))
