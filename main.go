@@ -42,12 +42,12 @@ func main() {
 			&cli.BoolFlag{
 				Name:    defs.OptionIPv4,
 				Aliases: []string{defs.OptionIPv4Alt},
-				Usage:   "Force IPv4 only, will not obey when fetch server list\n\t",
+				Usage:   "Force IPv4 only",
 			},
 			&cli.BoolFlag{
 				Name:    defs.OptionIPv6,
 				Aliases: []string{defs.OptionIPv6Alt},
-				Usage:   "Force IPv6 only, will not obey when fetch server list\n\t",
+				Usage:   "Force IPv6 only",
 			},
 			&cli.BoolFlag{
 				Name:   defs.OptionNoDownload,
@@ -116,25 +116,10 @@ func main() {
 					"\tmultiple times. Cannot be used with --exclude",
 			},
 			&cli.StringSliceFlag{
-				Name:    defs.OptionProvince,
-				Aliases: []string{defs.OptionProvinceAlt},
-				Usage: "Specify a `PROVINCE` ID or Code to test against. Can be\n" +
-					"\tsupplied multiple times.",
-				Hidden: true,
-			},
-			&cli.StringSliceFlag{
-				Name:    defs.OptionISP,
-				Aliases: []string{defs.OptionISPAlt},
-				Usage: "Specify a `ISP` ASN or Code to test against. Can be supplied\n" +
-					"\tmultiple times.",
-				Hidden: true,
-			},
-			&cli.StringFlag{
 				Name:    defs.OptionServerGroup,
 				Aliases: []string{defs.OptionServerGroupAlt},
-				Usage: "Filter a group of servers by `PROVINCE@ISP` to test.\n" +
-					"\tCannot be used with --province or --isp.",
-				Hidden: true,
+				Usage: "Specify a group of servers by `PROVINCE@ISP` to test.\n" +
+					"\tCan be supplied multiple times.",
 			},
 			&cli.StringSliceFlag{
 				Name: defs.OptionExclude,
@@ -181,21 +166,6 @@ func main() {
 				Aliases: []string{"verbose"},
 				Usage:   "Debug mode (verbose logging)",
 				Hidden:  true,
-			},
-			&cli.BoolFlag{
-				Name:    defs.OptionDisableTai,
-				Aliases: []string{defs.OptionDisableTaiAlt},
-				Usage:   "Don't use Global Speed servers",
-			},
-			&cli.BoolFlag{
-				Name:    defs.OptionDisablePet,
-				Aliases: []string{defs.OptionDisablePetAlt},
-				Usage:   "Don't use Perception servers",
-			},
-			&cli.BoolFlag{
-				Name:    defs.OptionDisableWir,
-				Aliases: []string{defs.OptionDisableWirAlt},
-				Usage:   "Don't use Wireless Speed servers",
 			},
 		},
 	}

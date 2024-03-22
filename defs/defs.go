@@ -1,116 +1,47 @@
 package defs
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
-	"reflect"
-	"strconv"
-	"strings"
-	"time"
 )
 
 var (
 	BuildDate   string
 	ProgName    string
 	ProgVersion string
-	Brand       = "OnePlus"
-	DeviceID    = "b721c5a0dba37004"
 	Model       = "NE2210"
 	OS          = "Android 14"
 	AndroidUA   = fmt.Sprintf("Dalvik/2.1.0 (Linux; U; %s; %s Build/TP1A.220624.014)", OS, Model)
 	BrowserUA   = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.60 Safari/537.36"
 )
 
-type IPInfoResponse struct {
-	IP       string `json:"ip"`
-	Country  string `json:"country"`
-	Region   string `json:"region"`
-	City     string `json:"city"`
-	District string `json:"district,omitempty"`
-	Isp      string `json:"isp"`
+type Group struct {
+	Province string
+	ISP      uint8
 }
-
-type ProvinceInfo struct {
-	ID    uint8  `csv:"id"`
-	Code  string `csv:"code"`
-	Short string `csv:"short"`
-	Name  string `csv:"name"`
-	Lon   string `csv:"lon"`
-	Lat   string `csv:"lat"`
-}
-
-var (
-	GUANGDONG = ProvinceInfo{44, "gd", "广东", "广东省", "113.266887", "23.133306"}
-	DEFPROV   = ProvinceInfo{0, "uk", "未知", "未知", "0", "0"}
-)
 
 type ISPInfo struct {
 	ID    uint8
-	ASN   string
+	ASN   uint16
 	Short string
 	Code  string
 	Name  string
 }
 
 var (
-	TELECOM = ISPInfo{1, "4134", "ct", "TELECOM", "电信"}
-	CERNET  = ISPInfo{4, "4538", "cernet", "CERNET", "教育网"}
-	UNICOM  = ISPInfo{2, "4837", "cu", "UNICOM", "联通"}
-	CATV    = ISPInfo{5, "7641", "catv", "CHINABTN", "广电网"}
-	MOBILE  = ISPInfo{3, "9808", "cm", "MOBILE", "移动"}
-	DRPENG  = ISPInfo{6, "17964", "drpeng", "DXTNET", "鹏博士"}
-	DEFISP  = ISPInfo{0, "", "uk", "UNKNOWN", "未知"}
-	ISPList = []*ISPInfo{&TELECOM, &CERNET, &UNICOM, &CATV, &MOBILE, &DRPENG}
+	TELECOM = ISPInfo{1, 4134, "ct", "TELECOM", "电信"}
+	CERNET  = ISPInfo{4, 4538, "cernet", "CERNET", "教育网"}
+	UNICOM  = ISPInfo{2, 4837, "cu", "UNICOM", "联通"}
+	CATV    = ISPInfo{5, 7641, "catv", "CHINABTN", "广电网"}
+	MOBILE  = ISPInfo{3, 9808, "cm", "MOBILE", "移动"}
+	DRPENG  = ISPInfo{6, 17964, "drpeng", "DXTNET", "鹏博士"}
+	DEFISP  = ISPInfo{0, 0, "uk", "UNKNOWN", "未知"}
+	ISPMap  = map[uint8]*ISPInfo{
+		TELECOM.ID: &TELECOM,
+		CERNET.ID:  &CERNET,
+		UNICOM.ID:  &UNICOM,
+		CATV.ID:    &CATV,
+		MOBILE.ID:  &MOBILE,
+		DRPENG.ID:  &DRPENG,
+		DEFISP.ID:  &DEFISP,
+	}
 )
-
-type GDPayload struct {
-	Brand     string `json:"c_brand"`
-	IMEI      string `json:"c_imei"`
-	Model     string `json:"c_model"`
-	Network   int    `json:"c_network"`
-	OS        string `json:"c_os"`
-	Type      int    `json:"c_type"`
-	Version   string `json:"c_version"`
-	Nonce     string `json:"nonce"`
-	Sign      string `json:"sign"`
-	Timestamp string `json:"timestamp"`
-}
-
-func (g *GDPayload) Init() {
-	time.Local, _ = time.LoadLocation("Asia/Chongqing")
-
-	g.Brand = Brand
-	g.IMEI = DeviceID
-	g.Model = Model
-	g.Network = 1
-	g.OS = OS
-	g.Type = 2
-	g.Version = "1.5.1"
-	g.Timestamp = strconv.Itoa(int(time.Now().Local().UnixMilli()))
-
-	md5Payload := ""
-	sVal := reflect.ValueOf(g)
-	sType := reflect.TypeOf(g)
-	if sType.Kind() == reflect.Ptr {
-		sVal = sVal.Elem()
-		sType = sType.Elem()
-	}
-	for i := 0; i < sVal.NumField(); i++ {
-		val := sVal.Field(i)
-		str := ""
-		switch val.Kind() {
-		case reflect.String:
-			str = val.String()
-		case reflect.Int:
-			str = strconv.Itoa(int(val.Int()))
-		}
-		if str != "" {
-			md5Payload += fmt.Sprintf("%s=%s&", sType.Field(i).Tag.Get("json"), str)
-		}
-	}
-	md5Payload += "key=a32e(-.-)rx234xo"
-	md5Ctx := md5.New()
-	md5Ctx.Write([]byte(md5Payload))
-	g.Sign = strings.ToUpper(hex.EncodeToString(md5Ctx.Sum(nil)))
-}

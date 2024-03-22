@@ -8,8 +8,7 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"net/url"
-	"strconv"
+	"os"
 	"strings"
 	"time"
 
@@ -18,15 +17,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func MatchProvince(prov string, provinces *[]ProvinceInfo) *ProvinceInfo {
-	for _, p := range *provinces {
-		if p.Short == prov || p.Name == prov || strings.Contains(p.Name, prov) || strings.Contains(prov, p.Short) {
-			return &p
-		}
-	}
-	return &DEFPROV
-}
-
 type ServerGlobal struct {
 	ID   int    `json:"hostid,string"`
 	Name string `json:"hostname"`
@@ -34,11 +24,8 @@ type ServerGlobal struct {
 	Port string `json:"port"`
 	Prov string `json:"pname"`
 	City string `json:"city"`
+	Loc  string `json:"location,omitempty"`
 	ISP  string `json:"oper,omitempty"`
-}
-
-func (s *ServerGlobal) GetProvince(provinces *[]ProvinceInfo) *ProvinceInfo {
-	return MatchProvince(s.Prov, provinces)
 }
 
 func (s *ServerGlobal) GetISP() *ISPInfo {
@@ -56,83 +43,11 @@ func (s *ServerGlobal) GetISP() *ISPInfo {
 	case "鹏博士":
 		return &DRPENG
 	default:
-		for _, isp := range ISPList {
+		for _, isp := range ISPMap {
 			if strings.HasSuffix(s.Name, isp.Name) {
 				return isp
 			}
 		}
-		return &DEFISP
-	}
-}
-
-type ServerPerception struct {
-	ID          int    `json:"id"`
-	Name        string `json:"server_name"`
-	IP          string `json:"server_ip"`
-	Prov        string `json:"province"`
-	City        string `json:"city"`
-	ISP         string `json:"operator_id"`
-	DownloadURL string `json:"http_downloadUrl"`
-	UploadURL   string `json:"http_uploadUrl"`
-	PingURL     string `json:"ping_url"`
-}
-
-func (s *ServerPerception) GetISP() *ISPInfo {
-	switch s.ISP {
-	case "0":
-		return &MOBILE
-	case "1":
-		return &TELECOM
-	case "3":
-		return &UNICOM
-	case "5":
-		return &CERNET
-	case "6":
-		return &CATV
-	default:
-		return &DEFISP
-	}
-}
-
-func (s *ServerPerception) GetCity(prov *ProvinceInfo) string {
-	city := strings.TrimSuffix(s.City, s.GetISP().Name)
-	city = strings.TrimPrefix(city, prov.Short)
-	city = strings.TrimPrefix(city, prov.Name)
-	city = strings.Trim(city, "-")
-
-	if city == "" {
-		return prov.Short
-	}
-
-	if strings.Contains(city, "-") {
-		city = strings.Split(city, "-")[0]
-	}
-
-	city = strings.TrimSuffix(city, "市")
-	return city
-}
-
-type ServerWireless struct {
-	ID    int    `json:"s_id"`
-	Name  string `json:"s_name"`
-	IP    string `json:"s_ip"`
-	IPv6  string `json:"s_ipv6"`
-	URL   string `json:"s_url"`
-	URLv6 string `json:"s_url_ipv6"`
-	City  string `json:"s_city"`
-	Prov  string `json:"s_province"`
-	ISP   int    `json:"s_operator"`
-}
-
-func (s *ServerWireless) GetISP() *ISPInfo {
-	switch s.ISP {
-	case 1:
-		return &MOBILE
-	case 2:
-		return &UNICOM
-	case 3:
-		return &TELECOM
-	default:
 		return &DEFISP
 	}
 }
@@ -147,52 +62,61 @@ const (
 
 // Server represents a speed test server
 type Server struct {
-	ID          int
-	Name        string
-	IP          string
-	IPv6        string
-	Province    *ProvinceInfo
-	City        string
-	ISP         *ISPInfo
-	URL         string
-	URLv6       string
-	DownloadURL string
-	UploadURL   string
-	PingURL     string
-	NoICMP      bool
-	Type        ServerType
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	IP          string     `json:"-"`
+	IPv6        string     `json:"-"`
+	Host        string     `json:"host"`
+	Port        uint16     `json:"port"`
+	Prov        uint8      `json:"province"`
+	Province    string     `json:"-"`
+	City        string     `json:"city"`
+	ISP         uint8      `json:"isp"`
+	DownloadURI string     `json:"download"`
+	UploadURI   string     `json:"upload"`
+	PingURI     string     `json:"ping"`
+	Type        ServerType `json:"type"`
+	NoICMP      bool       `json:"-"`
 }
 
-func (s *Server) GetID() string {
+func (s *Server) ParseURI(ping bool) {
 	switch s.Type {
 	case Perception:
-		return fmt.Sprintf("P%d", s.ID)
+		if s.DownloadURI == "" && !ping {
+			s.DownloadURI = "/speedtest/download"
+		}
+		if s.UploadURI == "" && !ping {
+			s.UploadURI = "/speedtest/upload"
+		}
+		if s.PingURI == "" {
+			s.PingURI = "/speedtest/ping"
+		}
 	case WirelessSpeed:
-		return fmt.Sprintf("W%d", s.ID)
+		if s.DownloadURI == "" && !ping {
+			s.DownloadURI = "/GSpeedTestServer/download"
+		}
+		if s.UploadURI == "" && !ping {
+			s.UploadURI = "/GSpeedTestServer/upload"
+		}
+		if s.PingURI == "" {
+			s.PingURI = "/GSpeedTestServer/"
+		}
 	default:
-		return strconv.Itoa(s.ID)
+		if s.DownloadURI == "" && !ping {
+			s.DownloadURI = "/speed/File(1G).dl"
+		}
+		if s.UploadURI == "" && !ping {
+			s.UploadURI = "/speed/doAnalsLoad.do"
+		}
+		if s.PingURI == "" {
+			s.PingURI = "/speed/"
+		}
 	}
 }
 
 // IsUp checks the speed test backend is up by accessing the ping URL
-func (s *Server) IsUp(network string) bool {
-	var target string
-
-	switch s.Type {
-	case Perception:
-		target = s.PingURL
-	case WirelessSpeed:
-		switch network {
-		case "ip6":
-			target = s.URLv6
-		default:
-			target = s.URL
-		}
-	default:
-		target = s.URL
-	}
-
-	req, err := http.NewRequest(http.MethodGet, target, nil)
+func (s *Server) IsUp() bool {
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s:%d%s", s.Host, s.Port, s.PingURI), nil)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return false
@@ -215,38 +139,13 @@ func (s *Server) IsUp(network string) bool {
 func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, float64, error) {
 	if s.NoICMP {
 		log.Debugf("Skipping ICMP for server %s, will use HTTP ping", s.Name)
-		return s.PingAndJitter(count+2, network)
+		return s.PingAndJitter(count + 2)
 	}
 
-	var target string
-
-	switch s.Type {
-	case Perception:
-		if s.URL != "" {
-			target = s.URL
-		} else {
-			target = s.IP
-		}
-	case WirelessSpeed:
-		switch network {
-		case "ip6":
-			target = s.IPv6
-		default:
-			if u, err := url.Parse(s.URL); err != nil {
-				log.Debugf("Failed when parsing server URL: %s", err)
-				return 0, 0, err
-			} else {
-				target = u.Hostname()
-			}
-		}
-	default:
-		target = s.IP
-	}
-
-	p, err := ping.NewPinger(target)
+	p, err := ping.NewPinger(s.Host)
 	if err != nil {
 		log.Debugf("ICMP ping failed: %s, will use HTTP ping", err)
-		return s.PingAndJitter(count+2, network)
+		return s.PingAndJitter(count + 2)
 	}
 	p.SetPrivileged(true)
 	p.SetNetwork(network)
@@ -261,7 +160,7 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, f
 	if err := p.Run(); err != nil {
 		log.Debugf("Failed to ping target host: %s", err)
 		log.Debug("Will try TCP ping")
-		return s.PingAndJitter(count+2, network)
+		return s.PingAndJitter(count + 2)
 	}
 
 	stats := p.Statistics()
@@ -284,33 +183,17 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, f
 	if len(stats.Rtts) == 0 {
 		s.NoICMP = true
 		log.Debugf("No ICMP pings returned for server %s (%s), trying TCP ping", s.Name, s.IP)
-		return s.PingAndJitter(count+2, network)
+		return s.PingAndJitter(count + 2)
 	}
 
 	return float64(stats.AvgRtt.Milliseconds()), jitter, nil
 }
 
 // PingAndJitter pings the server via accessing ping URL and calculate the average ping and jitter
-func (s *Server) PingAndJitter(count int, network string) (float64, float64, error) {
-	var target string
-
-	switch s.Type {
-	case Perception:
-		target = s.PingURL
-	case WirelessSpeed:
-		switch network {
-		case "ip6":
-			target = s.URLv6
-		default:
-			target = s.URL
-		}
-	default:
-		target = s.URL
-	}
-
+func (s *Server) PingAndJitter(count int) (float64, float64, error) {
 	var pings []float64
 
-	req, err := http.NewRequest(http.MethodGet, target, nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s:%d%s", s.Host, s.Port, s.PingURI), nil)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
@@ -355,30 +238,19 @@ func (s *Server) PingAndJitter(count int, network string) (float64, float64, err
 }
 
 // Download performs the actual download test
-func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration time.Duration, network, token string) (float64, uint64, error) {
+func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration time.Duration, token string) (float64, uint64, error) {
 	counter := NewCounter()
 	counter.SetMebi(useMebi)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var uri string
-	switch s.Type {
-	case Perception:
-		uri = s.DownloadURL
-	case WirelessSpeed:
-		switch network {
-		case "ip6":
-			uri = s.URLv6
-		default:
-			uri = s.URL
-		}
-		uri = fmt.Sprintf("%s/download", uri)
-	default:
-		uri = fmt.Sprintf("%sFile(1G).dl?key=%s", s.URL, token)
+	url := fmt.Sprintf("http://%s:%d%s", s.Host, s.Port, s.DownloadURI)
+	if s.Type == GlobalSpeed {
+		url = fmt.Sprintf("%s?key=%s", url, token)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
@@ -398,7 +270,7 @@ func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration
 			defer resp.Body.Close()
 
 			if _, err = io.Copy(io.Discard, io.TeeReader(resp.Body, counter)); err != nil {
-				if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+				if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !os.IsTimeout(err) {
 					log.Debugf("Failed when reading HTTP response: %s", err)
 				}
 			}
@@ -450,7 +322,7 @@ Loop:
 }
 
 // Upload performs the actual upload test
-func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, uploadSize int, duration time.Duration, network, token string) (float64, uint64, error) {
+func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, uploadSize int, duration time.Duration, token string) (float64, uint64, error) {
 	counter := NewCounter()
 	counter.SetMebi(useMebi)
 	counter.SetUploadSize(uploadSize)
@@ -465,23 +337,7 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, up
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var uri string
-	switch s.Type {
-	case Perception:
-		uri = s.UploadURL
-	case WirelessSpeed:
-		switch network {
-		case "ip6":
-			uri = s.URLv6
-		default:
-			uri = s.URL
-		}
-		uri = fmt.Sprintf("%s/upload", uri)
-	default:
-		uri = fmt.Sprintf("%sdoAnalsLoad.do", s.URL)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, counter)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://%s:%d%s", s.Host, s.Port, s.UploadURI), counter)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
@@ -505,7 +361,7 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, up
 			log.Debugf("Failed when making HTTP request: %s", err)
 		} else if err == nil {
 			defer resp.Body.Close()
-			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+			if _, err := io.Copy(io.Discard, resp.Body); err != nil && !os.IsTimeout(err) {
 				log.Debugf("Failed when reading HTTP response: %s", err)
 			}
 

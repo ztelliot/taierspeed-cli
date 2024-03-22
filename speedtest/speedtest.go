@@ -2,15 +2,19 @@ package speedtest
 
 import (
 	"context"
+	"database/sql"
+	"embed"
 	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
+	_ "modernc.org/sqlite"
+	"modernc.org/sqlite/vfs"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -26,23 +30,10 @@ import (
 	"github.com/ztelliot/taierspeed-cli/report"
 )
 
-const (
-	apiBaseUrl = `https://dlc.cnspeedtest.com:8043`
-)
-
 var DomainRe = regexp.MustCompile(`([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.)+([a-zA-Z][-a-zA-Z]{0,62})`)
 
-//go:embed serverlist.json
-var ServerListByte []byte
-
-//go:embed province.csv
-var ProvinceListByte []byte
-
-//go:embed gdserverlist.json
-var GDServerListByte []byte
-
-//go:embed perserverlist.json
-var PerceptionServerListByte []byte
+//go:embed speedtest.db
+var SpeedDb embed.FS
 
 type PingJob struct {
 	Index  int
@@ -52,19 +43,6 @@ type PingJob struct {
 type PingResult struct {
 	Index int
 	Ping  float64
-}
-
-func GetRandom(tok, pre string, l int) string {
-	if tok == "" {
-		tok = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	}
-	bs := []byte(tok)
-	var res []byte
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := 0; i < l; i++ {
-		res = append(res, bs[r.Intn(len(bs))])
-	}
-	return pre + string(res)
 }
 
 // SpeedTest is the actual main function that handles the speed test(s)
@@ -100,10 +78,6 @@ func SpeedTest(c *cli.Context) error {
 		return fmt.Errorf("incompatible options '%s' and '%s'", defs.OptionSource, defs.OptionInterface)
 	}
 
-	if c.String(defs.OptionServerGroup) != "" && (len(c.StringSlice(defs.OptionProvince)) > 0 || len(c.StringSlice(defs.OptionISP)) > 0) {
-		return fmt.Errorf("incompatible options '%s' and '%s' or '%s'", defs.OptionServerGroup, defs.OptionProvince, defs.OptionISP)
-	}
-
 	// set CSV delimiter
 	gocsv.TagSeparator = c.String(defs.OptionCSVDelimiter)
 
@@ -120,202 +94,12 @@ func SpeedTest(c *cli.Context) error {
 		return errors.New("invalid concurrent requests setting")
 	}
 
-	var serverGroup []string
-	if c.String(defs.OptionServerGroup) != "" {
-		serverGroup = strings.Split(c.String(defs.OptionServerGroup), "@")
-		if len(serverGroup) != 2 || serverGroup[0] == "" || serverGroup[1] == "" {
-			log.Error("invalid server group")
-			return errors.New("invalid server group")
-		}
-	}
-
 	// HTTP requests timeout
 	http.DefaultClient.Timeout = time.Duration(c.Int(defs.OptionTimeout)) * time.Second
 
 	forceIPv4 := c.Bool(defs.OptionIPv4)
 	forceIPv6 := c.Bool(defs.OptionIPv6)
 	noICMP := c.Bool(defs.OptionNoICMP)
-
-	// TODO: change transport here
-
-	var ispInfo *defs.IPInfoResponse
-	// load server list
-	var servers []defs.Server
-	var err error
-	var provinces []defs.ProvinceInfo
-	var provs []defs.ProvinceInfo
-	var isps []*defs.ISPInfo
-
-	if err := gocsv.UnmarshalBytes(ProvinceListByte, &provinces); err != nil {
-		log.Error("Failed to load province info")
-		return err
-	}
-
-	if !c.Bool(defs.OptionList) {
-		ispInfo, _ = getIPInfo()
-	}
-
-	// TODO: refactor province filter
-
-	isCN := false
-	if len(c.StringSlice(defs.OptionProvince)) > 0 || len(serverGroup) > 0 {
-		op := c.StringSlice(defs.OptionProvince)
-		if len(op) <= 0 {
-			op = []string{serverGroup[0]}
-		}
-		for _, p := range provinces {
-			if contains(op, strconv.Itoa(int(p.ID))) || contains(op, p.Code) {
-				provs = append(provs, p)
-			}
-		}
-		if len(provs) == 0 {
-			err = errors.New("specified province(s) not found")
-			log.Errorf("Error when parsing server list: %s", err)
-			return err
-		}
-	} else if !c.Bool(defs.OptionList) && len(c.StringSlice(defs.OptionServer)) <= 0 {
-		if ispInfo != nil && ispInfo.Country == "中国" {
-			isCN = true
-			provs = append(provs, *getProvInfo(&provinces, ispInfo.Region))
-		} else {
-			provs = append(provs, *getProvInfo(&provinces, ""))
-		}
-	}
-
-	if len(c.StringSlice(defs.OptionISP)) > 0 || len(serverGroup) > 0 {
-		isCN = false
-		oi := c.StringSlice(defs.OptionISP)
-		if len(oi) <= 0 {
-			oi = []string{serverGroup[1]}
-		}
-		for _, i := range defs.ISPList {
-			if contains(oi, i.ASN) || contains(oi, i.Short) {
-				isps = append(isps, i)
-			}
-		}
-		if len(isps) == 0 {
-			err = errors.New("specified isp(s) not found")
-			log.Errorf("Error when parsing server list: %s", err)
-			return err
-		}
-	}
-
-	hasGlobal, hasPerception, hasWireless := false, false, false
-	if len(c.StringSlice(defs.OptionServer)) > 0 {
-		for _, s := range c.StringSlice(defs.OptionServer) {
-			if strings.HasPrefix(s, "P") {
-				hasPerception = true
-			} else if strings.HasPrefix(s, "W") {
-				hasWireless = true
-			} else {
-				hasGlobal = true
-			}
-		}
-	} else {
-		hasGlobal, hasPerception, hasWireless = true, true, true
-	}
-
-	// fetch the server list JSON and parse it into the `servers` array
-	log.Infof("Retrieving server list")
-
-	if !c.Bool(defs.OptionDisableTai) && !forceIPv6 && hasGlobal {
-		var serversT []defs.Server
-
-		if serversT, err = getGlobalServerList(isCN, ispInfo, isps, &provs, &provinces); err != nil {
-			log.Errorf("Error when fetching server list: %s", err)
-			return err
-		}
-		if serversT, err = preprocessServers(serversT, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList)); err != nil {
-			log.Errorf("Error when preprocessing server list: %s", err)
-			return err
-		}
-		servers = append(servers, serversT...)
-	}
-
-	if !c.Bool(defs.OptionDisablePet) && !(isCN && len(servers) > 0) && hasPerception {
-		var serversP []defs.Server
-		var serversPT []defs.Server
-
-		if len(provs) <= 0 {
-			serversP, err = getPerceptionServerList(nil, isps, &provinces)
-		} else {
-			for _, s := range provs {
-				serversPT, err = getPerceptionServerList(&s, isps, &provinces)
-				serversP = append(serversP, serversPT...)
-			}
-		}
-		if err != nil {
-			log.Errorf("Error when fetching server list: %s", err)
-			return err
-		}
-		if serversP, err = preprocessServers(serversP, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList)); err != nil {
-			log.Errorf("Error when preprocessing server list: %s", err)
-			return err
-		}
-		servers = append(servers, serversP...)
-	}
-
-	if !c.Bool(defs.OptionDisableWir) && !(isCN && len(servers) > 0) && hasWireless {
-		if len(provs) <= 0 || checkProv(provs, &defs.GUANGDONG) {
-			var serversW []defs.Server
-			var serversWT []defs.ServerWireless
-
-			if err = json.Unmarshal(GDServerListByte, &serversWT); err == nil {
-				for _, s := range serversWT {
-					isp := s.GetISP()
-					if len(isps) <= 0 || checkISP(isps, isp) {
-						serversW = append(serversW, defs.Server{ID: s.ID, Name: s.Name, IP: s.IP, IPv6: s.IPv6, URL: s.URL, URLv6: s.URLv6, Province: &defs.GUANGDONG, City: s.City, ISP: isp, Type: defs.WirelessSpeed})
-					}
-				}
-			} else {
-				log.Errorf("Error when fetching server list: %s", err)
-				return err
-			}
-
-			if serversW, err = preprocessServers(serversW, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer), !c.Bool(defs.OptionList)); err != nil {
-				log.Errorf("Error when preprocessing server list: %s", err)
-				return err
-			}
-			servers = append(servers, serversW...)
-		}
-	}
-
-	if forceIPv4 || forceIPv6 {
-		var serversFiltered []defs.Server
-		for _, server := range servers {
-			if forceIPv4 && server.IP != "" {
-				serversFiltered = append(serversFiltered, server)
-			}
-			if forceIPv6 && server.IPv6 != "" {
-				serversFiltered = append(serversFiltered, server)
-			}
-		}
-		servers = serversFiltered
-	}
-
-	if len(servers) == 0 {
-		err = errors.New("specified server(s) not found")
-	}
-
-	if err != nil {
-		log.Errorf("Error when parsing server list: %s", err)
-		return err
-	}
-
-	// if --list is given, list all the servers fetched and exit
-	if c.Bool(defs.OptionList) {
-		for _, svr := range servers {
-			var stacks []string
-			if svr.IP != "" {
-				stacks = append(stacks, "IPv4")
-			}
-			if svr.IPv6 != "" {
-				stacks = append(stacks, "IPv6")
-			}
-			fmt.Printf("%s: %s (%s%s) %v\n", svr.GetID(), svr.Name, svr.Province.Short, svr.ISP.Name, stacks)
-		}
-		return nil
-	}
 
 	var network string
 	switch {
@@ -389,61 +173,240 @@ func SpeedTest(c *cli.Context) error {
 
 	http.DefaultClient.Transport = transport
 
-	// if --server is given, do speed tests with all of them
-	if len(c.StringSlice(defs.OptionServer)) > 0 || len(servers) == 1 {
-		return doSpeedTest(c, servers, network, silent, noICMP, ispInfo)
-	} else {
-		// else select the fastest server from the list
-		log.Info("Selecting the fastest server based on ping")
+	var ispInfo *defs.IPInfoResponse
+	var servers []defs.Server
+	var err error
 
-		var wg sync.WaitGroup
-		jobs := make(chan PingJob, len(servers))
-		results := make(chan PingResult, len(servers))
-		done := make(chan struct{})
-
-		pingList := make(map[int]float64)
-
-		// spawn 10 concurrent pingers
-		for i := 0; i < 10; i++ {
-			go pingWorker(jobs, results, &wg, c.String(defs.OptionSource), network, noICMP)
-		}
-
-		// send ping jobs to workers
-		for idx, server := range servers {
-			wg.Add(1)
-			jobs <- PingJob{Index: idx, Server: server}
-		}
-
-		go func() {
-			wg.Wait()
-			close(done)
-		}()
-
-	Loop:
-		for {
-			select {
-			case result := <-results:
-				pingList[result.Index] = result.Ping
-			case <-done:
-				break Loop
-			}
-		}
-
-		if len(pingList) == 0 {
-			log.Fatal("No server is currently available, please try again later.")
-		}
-
-		// get the fastest server's index in the `servers` array
-		var serverIdx int
-		for idx, ping := range pingList {
-			if ping > 0 && ping <= pingList[serverIdx] {
-				serverIdx = idx
-			}
-		}
-
-		// do speed test on the server
-		return doSpeedTest(c, []defs.Server{servers[serverIdx]}, network, silent, noICMP, ispInfo)
+	if !c.Bool(defs.OptionList) {
+		ispInfo, _ = defs.GetIPInfo()
 	}
+
+	simple := true
+	if forceIPv6 || c.Bool(defs.OptionList) || c.IsSet(defs.OptionServer) || c.IsSet(defs.OptionServerGroup) || ispInfo == nil || ispInfo.IP == "" {
+		simple = false
+	}
+
+	// fetch the server list JSON and parse it into the `servers` array
+	log.Infof("Retrieving server list")
+
+	if simple {
+		var serversT []defs.Server
+
+		if serversT, err = getGlobalServerList(ispInfo.IP); err != nil {
+			log.Errorf("Error when fetching server list: %s", err)
+			return err
+		}
+		if serversT, err = preprocessServers(serversT, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer)); err != nil {
+			log.Errorf("Error when preprocessing server list: %s", err)
+			return err
+		}
+		if c.Bool(defs.OptionDebug) {
+			debugServer(&serversT, "Fetched")
+		}
+		log.Info("Selecting the fastest server based on ping")
+		servers = append(servers, selectServer(serversT, network, c, noICMP))
+	} else {
+		var groups []defs.Group
+
+		fn, f, err := vfs.New(SpeedDb)
+		if err != nil {
+			log.Error("Failed to load database")
+			return err
+		}
+		defer f.Close()
+
+		db, err := sql.Open("sqlite", "file:speedtest.db?vfs="+fn)
+		if err != nil {
+			log.Error("Failed to load database")
+			return err
+		}
+
+		if c.IsSet(defs.OptionServerGroup) {
+			for _, s := range c.StringSlice(defs.OptionServerGroup) {
+				sg := strings.Split(s, "@")
+				sgp, sgi := "", ""
+				switch len(sg) {
+				case 1:
+					sgp = sg[0]
+				case 2:
+					sgp, sgi = sg[0], sg[1]
+				default:
+					continue
+				}
+
+				var isp uint8 = 0
+				if sgi != "" {
+					for _, i := range defs.ISPMap {
+						if sgi == strconv.Itoa(int(i.ASN)) || sgi == i.Short {
+							isp = i.ID
+						}
+					}
+					if isp == 0 {
+						continue
+					}
+				}
+
+				groups = append(groups, defs.Group{Province: sgp, ISP: isp})
+			}
+		} else if forceIPv6 || c.Bool(defs.OptionList) || c.IsSet(defs.OptionServer) {
+			groups = append(groups, defs.Group{Province: "", ISP: 0})
+		} else {
+			groups = append(groups, defs.Group{Province: "sh", ISP: 1})
+		}
+
+		for _, g := range groups {
+			var serversT []defs.Server
+
+			query := "SELECT servers.id, servers.name, host, port, city, isp, download, upload, ping, type, short FROM servers, provinces WHERE province == provinces.id"
+			if g.Province != "" {
+				query += fmt.Sprintf(" AND code == '%s'", g.Province)
+			}
+			if g.ISP != 0 {
+				query += fmt.Sprintf(" AND isp == %d", g.ISP)
+			}
+			if row, err := db.Query(query); err == nil {
+				for row.Next() {
+					var s defs.Server
+					if err := row.Scan(&s.ID, &s.Name, &s.Host, &s.Port, &s.City, &s.ISP, &s.DownloadURI, &s.UploadURI, &s.PingURI, &s.Type, &s.Province); err == nil {
+						if DomainRe.MatchString(s.Host) {
+							if records, err := net.LookupHost(s.Host); err == nil {
+								for _, i := range records {
+									if strings.Contains(i, ":") {
+										s.IPv6 = i
+									} else {
+										s.IP = i
+									}
+								}
+							}
+						} else {
+							if strings.Contains(s.Host, ":") {
+								s.IPv6 = s.Host
+							} else {
+								s.IP = s.Host
+							}
+						}
+
+						if forceIPv4 || forceIPv6 {
+							if forceIPv4 && s.IP == "" {
+								continue
+							}
+							if forceIPv6 && s.IPv6 == "" {
+								continue
+							}
+						}
+						serversT = append(serversT, s)
+					}
+				}
+			}
+
+			if serversT, err = preprocessServers(serversT, c.StringSlice(defs.OptionExclude), c.StringSlice(defs.OptionServer)); err != nil {
+				log.Errorf("Error when preprocessing server list: %s", err)
+				return err
+			}
+			if c.Bool(defs.OptionList) || c.IsSet(defs.OptionServer) {
+				servers = append(servers, serversT...)
+			} else {
+				if c.Bool(defs.OptionDebug) {
+					debugServer(&serversT, "Fetched")
+				}
+				log.Info("Selecting the fastest server based on ping")
+				servers = append(servers, selectServer(serversT, network, c, noICMP))
+			}
+		}
+	}
+
+	if c.Bool(defs.OptionDebug) && !c.Bool(defs.OptionList) {
+		debugServer(&servers, "Selected")
+	}
+	if len(servers) == 0 {
+		err = errors.New("specified server(s) not found")
+	}
+
+	if err != nil {
+		log.Errorf("Error when parsing server list: %s", err)
+		return err
+	}
+
+	// if --list is given, list all the servers fetched and exit
+	if c.Bool(defs.OptionList) {
+		for _, svr := range servers {
+			var stacks []string
+			if svr.IP != "" {
+				stacks = append(stacks, "IPv4")
+			}
+			if svr.IPv6 != "" {
+				stacks = append(stacks, "IPv6")
+			}
+			fmt.Printf("%s: %s (%s%s) %v\n", svr.ID, svr.Name, svr.Province, defs.ISPMap[svr.ISP].Name, stacks)
+		}
+		return nil
+	}
+
+	return doSpeedTest(c, servers, network, silent, noICMP, ispInfo)
+}
+
+func selectServer(servers []defs.Server, network string, c *cli.Context, noICMP bool) defs.Server {
+	if len(servers) > 10 {
+		r := rand.New(rand.NewSource(time.Now().Unix()))
+		r.Shuffle(len(servers), func(i int, j int) {
+			servers[i], servers[j] = servers[j], servers[i]
+		})
+		servers = servers[:10]
+		if c.Bool(defs.OptionDebug) {
+			debugServer(&servers, "Randomly choice")
+		}
+	}
+
+	var wg sync.WaitGroup
+	jobs := make(chan PingJob, len(servers))
+	results := make(chan PingResult, len(servers))
+	done := make(chan struct{})
+
+	pingList := make(map[int]float64)
+
+	// spawn 10 concurrent pingers
+	for i := 0; i < 10; i++ {
+		go pingWorker(jobs, results, &wg, c.String(defs.OptionSource), network, noICMP)
+	}
+
+	// send ping jobs to workers
+	for idx, server := range servers {
+		server.ParseURI(true)
+		wg.Add(1)
+		jobs <- PingJob{Index: idx, Server: server}
+	}
+
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+Loop:
+	for {
+		select {
+		case result := <-results:
+			pingList[result.Index] = result.Ping
+		case <-done:
+			break Loop
+		}
+	}
+
+	if len(pingList) == 0 {
+		log.Fatal("No server is currently available, please try again later.")
+	}
+
+	// get the fastest server's index in the `servers` array
+	var serverIdx int
+	minPing := math.MaxFloat64
+	for idx, ping := range pingList {
+		if ping > 0 && ping <= minPing {
+			serverIdx = idx
+		}
+	}
+
+	// do speed test on the server
+	servers[serverIdx].ParseURI(false)
+	return servers[serverIdx]
 }
 
 func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGroup, srcIp, network string, noICMP bool) {
@@ -452,7 +415,7 @@ func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGro
 		server := job.Server
 
 		// check the server is up by accessing the ping URL and checking its returned value == empty and status code == 200
-		if server.IsUp(network) {
+		if server.IsUp() {
 			// skip ICMP if option given
 			server.NoICMP = noICMP
 
@@ -467,209 +430,82 @@ func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGro
 			results <- PingResult{Index: job.Index, Ping: ping}
 			wg.Done()
 		} else {
-			log.Debugf("Server %s (%s) doesn't seem to be up, skipping", server.Name, server.IP)
+			log.Debugf("Server %s (%s) seems down, skipping", server.Name, server.IP)
 			wg.Done()
 		}
 	}
 }
 
-// getPerceptionServerList fetches the server JSON from perception
-func getPerceptionServerList(prov *defs.ProvinceInfo, isps []*defs.ISPInfo, provinces *[]defs.ProvinceInfo) ([]defs.Server, error) {
-	var servers []defs.ServerPerception
-	if err := json.Unmarshal(PerceptionServerListByte, &servers); err != nil {
-		return nil, err
-	}
+func getGlobalServerList(ip string) ([]defs.Server, error) {
+	var serversT []defs.ServerGlobal
 
-	var serversResolved []defs.Server
-	for _, s := range servers {
-		province := defs.MatchProvince(s.Prov, provinces)
-		server := defs.Server{ID: s.ID, Name: s.Name, IP: s.IP, DownloadURL: s.DownloadURL, UploadURL: s.UploadURL, PingURL: s.PingURL, Province: province, City: s.GetCity(province), ISP: s.GetISP(), Type: defs.Perception}
-		if downloadUrl, err := url.Parse(s.DownloadURL); err == nil {
-			host := downloadUrl.Hostname()
-			server.URL = host
-			if DomainRe.MatchString(host) {
-				if records, err := net.LookupHost(host); err == nil {
-					for _, i := range records {
-						if strings.Contains(i, ":") {
-							server.IPv6 = i
-						} else {
-							server.IP = i
-						}
-					}
-				}
-			}
-		}
-		serversResolved = append(serversResolved, server)
-	}
-
-	var serversFiltered []defs.Server
-	if prov != nil || len(isps) > 0 {
-		for _, s := range serversResolved {
-			if (prov != nil && prov.ID == s.Province.ID && (len(isps) <= 0 || checkISP(isps, s.ISP))) || (len(isps) > 0 && checkISP(isps, s.ISP) && (prov == nil || prov.ID == s.Province.ID)) {
-				serversFiltered = append(serversFiltered, s)
-			}
-		}
-		return serversFiltered, nil
-	}
-
-	return serversResolved, nil
-}
-
-func getGlobalServerList(isCN bool, isp *defs.IPInfoResponse, isps []*defs.ISPInfo, provs, provinces *[]defs.ProvinceInfo) ([]defs.Server, error) {
-	var servers []defs.ServerGlobal
-
-	if !isCN || isp == nil {
-		if err := json.Unmarshal(ServerListByte, &servers); err != nil {
-			return nil, err
-		}
-	} else {
-		uri := fmt.Sprintf("%s/dataServer/mobilematch_list.php?ip=%s&network=4&ipv6=0", apiBaseUrl, isp.IP)
-		req, err := http.NewRequest(http.MethodGet, uri, nil)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("User-Agent", defs.AndroidUA)
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-
-		b, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-
-		if err = json.Unmarshal(b, &servers); err != nil {
-			return nil, err
-		}
-	}
-
-	var serversResolved []defs.Server
-
-	for _, s := range servers {
-		isp := s.GetISP()
-		prov := s.GetProvince(provinces)
-		if (provs == nil || len(*provs) <= 0 || checkProv(*provs, prov)) && (len(isps) <= 0 || checkISP(isps, isp)) {
-			url := fmt.Sprintf("http://%s:%s/speed/", s.IP, s.Port)
-			serversResolved = append(serversResolved, defs.Server{ID: s.ID, IP: s.IP, URL: url, Name: s.Name, Province: s.GetProvince(provinces), City: s.City, ISP: isp})
-		}
-	}
-	return serversResolved, nil
-}
-
-// preprocessServers makes some needed modifications to the servers fetched
-func preprocessServers(servers []defs.Server, excludes, specific []string, filter bool) ([]defs.Server, error) {
-	if len(excludes) > 0 && len(specific) > 0 {
-		return nil, errors.New("either --exclude or --specific can be used")
-	}
-
-	if filter {
-		// exclude servers from --exclude
-		if len(excludes) > 0 {
-			var ret []defs.Server
-			for _, server := range servers {
-				if contains(excludes, server.GetID()) {
-					continue
-				}
-				ret = append(ret, server)
-			}
-			return ret, nil
-		}
-
-		// use only servers from --server
-		// special value -1 will test all servers
-		if len(specific) > 0 && !contains(specific, "-1") {
-			var ret []defs.Server
-			for _, server := range servers {
-				if contains(specific, server.GetID()) {
-					ret = append(ret, server)
-				}
-			}
-			return ret, nil
-		}
-	}
-
-	return servers, nil
-}
-
-func getProvInfo(provinces *[]defs.ProvinceInfo, name string) *defs.ProvinceInfo {
-	var prov *defs.ProvinceInfo
-
-	if name != "" {
-		prov = defs.MatchProvince(name, provinces)
-	}
-
-	if prov.ID != 0 {
-		return prov
-	} else {
-		return &defs.GUANGDONG
-	}
-}
-
-func getIPInfo() (*defs.IPInfoResponse, error) {
-	var ipInfo defs.IPInfoResponse
-	var ispRaw []string
-
-	uri := fmt.Sprintf("%s/dataServer/getIpLocS.php", apiBaseUrl)
+	uri := fmt.Sprintf("https://dlc.cnspeedtest.com:8043/dataServer/mobilematch_list.php?ip=%s&network=4&ipv6=0", ip)
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
-		log.Debugf("Failed when creating HTTP request: %s", err)
 		return nil, err
 	}
 	req.Header.Set("User-Agent", defs.AndroidUA)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Debugf("Failed when making HTTP request: %s", err)
+		return nil, err
+	}
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Debugf("Failed when reading HTTP response: %s", err)
+	if err = json.Unmarshal(b, &serversT); err != nil {
 		return nil, err
 	}
 
-	if len(b) > 0 {
-		data := strings.Split(string(b), "|")
-		ipInfo.IP = data[0]
-		if err := json.Unmarshal([]byte(data[1]), &ispRaw); err == nil {
-			ipInfo.Country = ispRaw[0]
-			ipInfo.Region = ispRaw[1]
-			ipInfo.City = ispRaw[2]
-			ipInfo.District = ispRaw[3]
-			ipInfo.Isp = ispRaw[4]
-		}
+	var servers []defs.Server
+	for _, s := range serversT {
+		port, _ := strconv.Atoi(s.Port)
+		servers = append(servers, defs.Server{ID: strconv.Itoa(s.ID), Name: s.Name, IP: s.IP, Host: s.IP, Port: uint16(port), Province: s.Prov, City: s.City, ISP: s.GetISP().ID})
 	}
+	return servers, nil
+}
 
-	return &ipInfo, nil
+// preprocessServers makes some needed modifications to the servers fetched
+func preprocessServers(servers []defs.Server, excludes, specific []string) ([]defs.Server, error) {
+	// exclude servers from --exclude
+	if len(excludes) > 0 && len(specific) == 0 {
+		var ret []defs.Server
+		for _, server := range servers {
+			if contains(excludes, server.ID) {
+				continue
+			}
+			ret = append(ret, server)
+		}
+		return ret, nil
+	} else if len(excludes) == 0 && len(specific) > 0 {
+		var ret []defs.Server
+		for _, server := range servers {
+			if contains(specific, server.ID) {
+				ret = append(ret, server)
+			}
+		}
+		return ret, nil
+	} else if len(excludes) > 0 && len(specific) > 0 {
+		var ret []defs.Server
+		for _, server := range servers {
+			if contains(specific, server.ID) && !contains(excludes, server.ID) {
+				ret = append(ret, server)
+			}
+		}
+		return ret, nil
+	} else {
+		return servers, nil
+	}
 }
 
 // contains is a helper function to check if a string is in a string array
 func contains(arr []string, val string) bool {
 	for _, v := range arr {
 		if v == val {
-			return true
-		}
-	}
-	return false
-}
-
-func checkProv(arr []defs.ProvinceInfo, val *defs.ProvinceInfo) bool {
-	for _, v := range arr {
-		if v.ID == val.ID {
-			return true
-		}
-	}
-	return false
-}
-
-func checkISP(arr []*defs.ISPInfo, val *defs.ISPInfo) bool {
-	for _, v := range arr {
-		if v.ID == val.ID {
 			return true
 		}
 	}

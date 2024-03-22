@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -27,16 +28,29 @@ const (
 	pingCount = 5
 )
 
+func getRandom(tok, pre string, l int) string {
+	if tok == "" {
+		tok = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	}
+	bs := []byte(tok)
+	var res []byte
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := 0; i < l; i++ {
+		res = append(res, bs[r.Intn(len(bs))])
+	}
+	return pre + string(res)
+}
+
 func enQueue(s defs.Server) string {
 	time.Local, _ = time.LoadLocation("Asia/Chongqing")
 	ts := strconv.Itoa(int(time.Now().Local().Unix()))
-	imei := GetRandom("0123456789ABCDEF", "TS", 16)
+	imei := getRandom("0123456789ABCDEF", "TS", 16)
 
 	md5Ctx := md5.New()
 	md5Ctx.Write([]byte(fmt.Sprintf("model=Android&imei=%s&stime=%s", imei, ts)))
 	token := hex.EncodeToString(md5Ctx.Sum(nil))
 
-	url := fmt.Sprintf("%sdovalid?key=&flag=true&bandwidth=200&model=Android&imei=%s&time=%s&token=%s", s.URL, imei, ts, token)
+	url := fmt.Sprintf("http://%s:%d/speed/dovalid?key=&flag=true&bandwidth=200&model=Android&imei=%s&time=%s&token=%s", s.Host, s.Port, imei, ts, token)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -71,7 +85,7 @@ func enQueue(s defs.Server) string {
 }
 
 func deQueue(s defs.Server, key string) bool {
-	url := fmt.Sprintf("%sdovalid?key=%s", s.URL, key)
+	url := fmt.Sprintf("http://%s:%d/speed/dovalid?key=%s", s.Host, s.Port, key)
 
 	req, err := http.NewRequest(http.MethodPost, url, nil)
 	if err != nil {
@@ -102,6 +116,14 @@ func deQueue(s defs.Server, key string) bool {
 	return true
 }
 
+func debugServer(s *[]defs.Server, prefix string) {
+	servers := ""
+	for _, server := range *s {
+		servers += fmt.Sprintf("%s(%s) ", server.Name, server.ID)
+	}
+	log.Debugf("%s %d servers: [ %s]", prefix, len(*s), servers)
+}
+
 // doSpeedTest is where the actual speed test happens
 func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, noICMP bool, ispInfo *defs.IPInfoResponse) error {
 	if !silent || c.Bool(defs.OptionSimple) {
@@ -112,7 +134,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			return nil
 		}
 		if ispInfo != nil {
-			fmt.Printf("ISP:\t\t%s%s\n", ispInfo.City, ispInfo.Isp)
+			fmt.Printf("ISP:\t\t%s%s\n", ispInfo.City, ispInfo.ISP)
 		} else {
 			fmt.Printf("ISP:\n")
 		}
@@ -128,15 +150,15 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 		if !silent || c.Bool(defs.OptionSimple) {
 			name, ip := currentServer.Name, currentServer.IP
 			if currentServer.Type == defs.Perception {
-				name = fmt.Sprintf("%s - %s", currentServer.Name, currentServer.ISP.Name)
+				name = fmt.Sprintf("%s - %s", currentServer.Name, defs.ISPMap[currentServer.ISP].Name)
 			}
 			if network == "ip6" {
 				ip = currentServer.IPv6
 			}
-			fmt.Printf("Server:\t\t%s [%s] (id = %s)\n", name, ip, currentServer.GetID())
+			fmt.Printf("Server:\t\t%s [%s] (id = %s)\n", name, ip, currentServer.ID)
 		}
 
-		if currentServer.IsUp(network) {
+		if currentServer.IsUp() {
 			// get ping and jitter value
 			var pb *spinner.Spinner
 			if !silent {
@@ -176,7 +198,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			if c.Bool(defs.OptionNoDownload) {
 				log.Info("Download test is disabled")
 			} else {
-				download, br, err := currentServer.Download(silent, c.Bool(defs.OptionBytes), c.Bool(defs.OptionMebiBytes), c.Int(defs.OptionConcurrent), time.Duration(c.Int(defs.OptionDuration))*time.Second, network, token)
+				download, br, err := currentServer.Download(silent, c.Bool(defs.OptionBytes), c.Bool(defs.OptionMebiBytes), c.Int(defs.OptionConcurrent), time.Duration(c.Int(defs.OptionDuration))*time.Second, token)
 				if err != nil {
 					log.Errorf("Failed to get download speed: %s", err)
 					return err
@@ -199,7 +221,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			if c.Bool(defs.OptionNoUpload) {
 				log.Info("Upload test is disabled")
 			} else {
-				upload, bw, err := currentServer.Upload(c.Bool(defs.OptionNoPreAllocate), silent, c.Bool(defs.OptionBytes), c.Bool(defs.OptionMebiBytes), c.Int(defs.OptionConcurrent), c.Int(defs.OptionUploadSize), time.Duration(c.Int(defs.OptionDuration))*time.Second, network, token)
+				upload, bw, err := currentServer.Upload(c.Bool(defs.OptionNoPreAllocate), silent, c.Bool(defs.OptionBytes), c.Bool(defs.OptionMebiBytes), c.Int(defs.OptionConcurrent), c.Int(defs.OptionUploadSize), time.Duration(c.Int(defs.OptionDuration))*time.Second, token)
 				if err != nil {
 					log.Errorf("Failed to get upload speed: %s", err)
 					return err
@@ -232,7 +254,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 				rep.BytesReceived = bytesRead
 				rep.BytesSent = bytesWritten
 
-				rep.ID = currentServer.GetID()
+				rep.ID = currentServer.ID
 				switch network {
 				case "ip6":
 					rep.IP = currentServer.IPv6
@@ -240,14 +262,14 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 					rep.IP = currentServer.IP
 				}
 				rep.Name = currentServer.Name
-				rep.Province = currentServer.Province.Short
+				rep.Province = currentServer.Province
 				rep.City = currentServer.City
-				rep.ISP = currentServer.ISP.Name
+				rep.ISP = defs.ISPMap[currentServer.ISP].Name
 
 				repsOut = append(repsOut, rep)
 			}
 		} else {
-			log.Infof("Selected server %s (%s) is not responding at the moment, try again later", currentServer.Name, currentServer.GetID())
+			log.Infof("Selected server %s (%s) is not responding at the moment, try again later", currentServer.Name, currentServer.ID)
 		}
 
 		//add a new line after each test if testing multiple servers
