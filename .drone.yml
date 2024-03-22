@@ -30,4 +30,3 @@ steps:
 trigger:
   event:
   - tag
-

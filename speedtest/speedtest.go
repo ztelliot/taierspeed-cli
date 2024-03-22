@@ -371,7 +371,6 @@ func selectServer(servers []defs.Server, network string, c *cli.Context, noICMP 
 
 	// send ping jobs to workers
 	for idx, server := range servers {
-		server.ParseURI(true)
 		wg.Add(1)
 		jobs <- PingJob{Index: idx, Server: server}
 	}
@@ -405,7 +404,6 @@ Loop:
 	}
 
 	// do speed test on the server
-	servers[serverIdx].ParseURI(false)
 	return servers[serverIdx]
 }
 

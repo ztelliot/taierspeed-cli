@@ -79,44 +79,54 @@ type Server struct {
 	NoICMP      bool       `json:"-"`
 }
 
-func (s *Server) ParseURI(ping bool) {
-	switch s.Type {
-	case Perception:
-		if s.DownloadURI == "" && !ping {
-			s.DownloadURI = "/speedtest/download"
+func (s *Server) DownloadURL() string {
+	if s.DownloadURI != "" {
+		return fmt.Sprintf("http://%s:%d%s", s.Host, s.Port, s.DownloadURI)
+	} else {
+		switch s.Type {
+		case Perception:
+			return fmt.Sprintf("http://%s:%d/speedtest/download", s.Host, s.Port)
+		case WirelessSpeed:
+			return fmt.Sprintf("http://%s:%d/GSpeedTestServer/download", s.Host, s.Port)
+		default:
+			return fmt.Sprintf("http://%s:%d/speed/File(1G).dl", s.Host, s.Port)
 		}
-		if s.UploadURI == "" && !ping {
-			s.UploadURI = "/speedtest/upload"
+	}
+}
+
+func (s *Server) UploadURL() string {
+	if s.UploadURI != "" {
+		return fmt.Sprintf("http://%s:%d%s", s.Host, s.Port, s.UploadURI)
+	} else {
+		switch s.Type {
+		case Perception:
+			return fmt.Sprintf("http://%s:%d/speedtest/upload", s.Host, s.Port)
+		case WirelessSpeed:
+			return fmt.Sprintf("http://%s:%d/GSpeedTestServer/upload", s.Host, s.Port)
+		default:
+			return fmt.Sprintf("http://%s:%d/speed/doAnalsLoad.do", s.Host, s.Port)
 		}
-		if s.PingURI == "" {
-			s.PingURI = "/speedtest/ping"
-		}
-	case WirelessSpeed:
-		if s.DownloadURI == "" && !ping {
-			s.DownloadURI = "/GSpeedTestServer/download"
-		}
-		if s.UploadURI == "" && !ping {
-			s.UploadURI = "/GSpeedTestServer/upload"
-		}
-		if s.PingURI == "" {
-			s.PingURI = "/GSpeedTestServer/"
-		}
-	default:
-		if s.DownloadURI == "" && !ping {
-			s.DownloadURI = "/speed/File(1G).dl"
-		}
-		if s.UploadURI == "" && !ping {
-			s.UploadURI = "/speed/doAnalsLoad.do"
-		}
-		if s.PingURI == "" {
-			s.PingURI = "/speed/"
+	}
+}
+
+func (s *Server) PingURL() string {
+	if s.PingURI != "" {
+		return fmt.Sprintf("http://%s:%d%s", s.Host, s.Port, s.PingURI)
+	} else {
+		switch s.Type {
+		case Perception:
+			return fmt.Sprintf("http://%s:%d/speedtest/ping", s.Host, s.Port)
+		case WirelessSpeed:
+			return fmt.Sprintf("http://%s:%d/GSpeedTestServer/", s.Host, s.Port)
+		default:
+			return fmt.Sprintf("http://%s:%d/speed/", s.Host, s.Port)
 		}
 	}
 }
 
 // IsUp checks the speed test backend is up by accessing the ping URL
 func (s *Server) IsUp() bool {
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s:%d%s", s.Host, s.Port, s.PingURI), nil)
+	req, err := http.NewRequest(http.MethodGet, s.PingURL(), nil)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return false
@@ -193,7 +203,7 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, f
 func (s *Server) PingAndJitter(count int) (float64, float64, error) {
 	var pings []float64
 
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s:%d%s", s.Host, s.Port, s.PingURI), nil)
+	req, err := http.NewRequest(http.MethodGet, s.PingURL(), nil)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
@@ -245,7 +255,7 @@ func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	url := fmt.Sprintf("http://%s:%d%s", s.Host, s.Port, s.DownloadURI)
+	url := s.DownloadURL()
 	if s.Type == GlobalSpeed {
 		url = fmt.Sprintf("%s?key=%s", url, token)
 	}
@@ -337,7 +347,7 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, up
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://%s:%d%s", s.Host, s.Port, s.UploadURI), counter)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.UploadURL(), counter)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
