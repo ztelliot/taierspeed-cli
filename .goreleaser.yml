@@ -42,13 +42,6 @@ builds:
   goarch:
     - amd64
     - arm64
-    - mips
-    - mipsle
-    - mips64
-    - mips64le
-  gomips:
-    - hardfloat
-    - softfloat
   ignore:
     - goos: linux
       goarch: amd64
