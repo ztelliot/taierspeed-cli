@@ -116,14 +116,6 @@ func deQueue(s defs.Server, key string) bool {
 	return true
 }
 
-func debugServer(s *[]defs.Server, prefix string) {
-	servers := ""
-	for _, server := range *s {
-		servers += fmt.Sprintf("%s(%s) ", server.Name, server.ID)
-	}
-	log.Debugf("%s %d servers: [ %s]", prefix, len(*s), servers)
-}
-
 // doSpeedTest is where the actual speed test happens
 func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, noICMP bool, ispInfo *defs.IPInfoResponse) error {
 	if !silent || c.Bool(defs.OptionSimple) {

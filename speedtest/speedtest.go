@@ -200,9 +200,7 @@ func SpeedTest(c *cli.Context) error {
 			log.Errorf("Error when preprocessing server list: %s", err)
 			return err
 		}
-		if c.Bool(defs.OptionDebug) {
-			debugServer(&serversT, "Fetched")
-		}
+		log.Debugf("Find %d servers", len(serversT))
 		servers = append(servers, selectServer(serversT, network, c, noICMP))
 	} else {
 		var groups []defs.Group
@@ -305,17 +303,13 @@ func SpeedTest(c *cli.Context) error {
 			if c.Bool(defs.OptionList) || c.IsSet(defs.OptionServer) {
 				servers = append(servers, serversT...)
 			} else {
-				if c.Bool(defs.OptionDebug) {
-					debugServer(&serversT, "Fetched")
-				}
+				log.Debugf("Find %d servers", len(serversT))
 				servers = append(servers, selectServer(serversT, network, c, noICMP))
 			}
 		}
 	}
 
-	if c.Bool(defs.OptionDebug) && !c.Bool(defs.OptionList) {
-		debugServer(&servers, "Selected")
-	}
+	log.Debugf("Selected %d servers", len(servers))
 	if len(servers) == 0 {
 		err = errors.New("specified server(s) not found")
 	}
@@ -350,9 +344,6 @@ func selectServer(servers []defs.Server, network string, c *cli.Context, noICMP 
 			servers[i], servers[j] = servers[j], servers[i]
 		})
 		servers = servers[:10]
-		if c.Bool(defs.OptionDebug) {
-			debugServer(&servers, "Randomly choice")
-		}
 	}
 
 	log.Info("Selecting the fastest server based on ping")
@@ -428,7 +419,7 @@ func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGro
 			results <- PingResult{Index: job.Index, Ping: ping}
 			wg.Done()
 		} else {
-			log.Debugf("Server %s (%s) seems down, skipping", server.Name, server.IP)
+			log.Debugf("Server %s (%s) seems down, skipping", server.Name, server.ID)
 			wg.Done()
 		}
 	}

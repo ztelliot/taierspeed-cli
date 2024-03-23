@@ -367,11 +367,11 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, up
 
 	doUpload := func() {
 		resp, err := http.DefaultClient.Do(req)
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !os.IsTimeout(err) {
 			log.Debugf("Failed when making HTTP request: %s", err)
 		} else if err == nil {
 			defer resp.Body.Close()
-			if _, err := io.Copy(io.Discard, resp.Body); err != nil && !os.IsTimeout(err) {
+			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 				log.Debugf("Failed when reading HTTP response: %s", err)
 			}
 
