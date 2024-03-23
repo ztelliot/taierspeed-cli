@@ -77,7 +77,7 @@ func main() {
 			},
 			&cli.BoolFlag{
 				Name:  defs.OptionMebiBytes,
-				Usage: "Use 1024 bytes as 1 kilobyte instead of 1000",
+				Usage: "Use 1024 bytes as 1 kilobyte instead of 1000\n\t",
 			},
 			&cli.BoolFlag{
 				Name:    defs.OptionSimple,
@@ -90,9 +90,8 @@ func main() {
 					"\taffected by --bytes",
 			},
 			&cli.StringFlag{
-				Name: defs.OptionCSVDelimiter,
-				Usage: "Single character delimiter (`CSV_DELIMITER`) to use in\n" +
-					"\tCSV output.",
+				Name:  defs.OptionCSVDelimiter,
+				Usage: "Single character delimiter to use in CSV output\n\t",
 				Value: ",",
 			},
 			&cli.BoolFlag{
@@ -112,19 +111,19 @@ func main() {
 			&cli.StringSliceFlag{
 				Name:    defs.OptionServer,
 				Aliases: []string{defs.OptionServerAlt},
-				Usage: "Specify a `SERVER` ID to test against. Can be supplied\n" +
-					"\tmultiple times. Cannot be used with --exclude",
+				Usage: "Specify a server `ID` to test against. Can be supplied\n" +
+					"\tmultiple times",
 			},
 			&cli.StringSliceFlag{
 				Name:    defs.OptionServerGroup,
 				Aliases: []string{defs.OptionServerGroupAlt},
-				Usage: "Specify a group of servers by `PROVINCE@ISP` to test.\n" +
-					"\tCan be supplied multiple times.",
+				Usage: "Specify a `GROUP` of servers by PROVINCE@ISP to test.\n" +
+					"\tCan be supplied multiple times",
 			},
 			&cli.StringSliceFlag{
 				Name: defs.OptionExclude,
 				Usage: "`EXCLUDE` a server from selection. Can be supplied\n" +
-					"\tmultiple times. Cannot be used with --server",
+					"\tmultiple times",
 			},
 			&cli.StringFlag{
 				Name: defs.OptionSource,
@@ -138,13 +137,13 @@ func main() {
 			},
 			&cli.IntFlag{
 				Name:  defs.OptionTimeout,
-				Usage: "HTTP `TIMEOUT` in seconds.",
+				Usage: "HTTP `TIMEOUT` in seconds",
 				Value: 15,
 			},
 			&cli.IntFlag{
 				Name:    defs.OptionDuration,
 				Aliases: []string{defs.OptionDurationAlt},
-				Usage:   "Upload and download test duration in seconds",
+				Usage:   "Upload and download test duration in seconds\n\t",
 				Value:   15,
 				Hidden:  true,
 			},
