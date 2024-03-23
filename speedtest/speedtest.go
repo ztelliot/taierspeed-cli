@@ -201,7 +201,9 @@ func SpeedTest(c *cli.Context) error {
 			return err
 		}
 		log.Debugf("Find %d servers", len(serversT))
-		servers = append(servers, selectServer(serversT, network, c, noICMP))
+		if server, ok := selectServer("", serversT, network, c, noICMP); ok {
+			servers = append(servers, server)
+		}
 	} else {
 		var groups []defs.Group
 
@@ -303,8 +305,13 @@ func SpeedTest(c *cli.Context) error {
 			if c.Bool(defs.OptionList) || c.IsSet(defs.OptionServer) {
 				servers = append(servers, serversT...)
 			} else {
-				log.Debugf("Find %d servers", len(serversT))
-				servers = append(servers, selectServer(serversT, network, c, noICMP))
+				logPre := fmt.Sprintf("[%s@%s] ", g.Province, defs.ISPMap[g.ISP].Short)
+				log.Debugf("%sFind %d servers", logPre, len(serversT))
+				if len(serversT) > 0 {
+					if server, ok := selectServer(logPre, serversT, network, c, noICMP); ok {
+						servers = append(servers, server)
+					}
+				}
 			}
 		}
 	}
@@ -337,7 +344,7 @@ func SpeedTest(c *cli.Context) error {
 	return doSpeedTest(c, servers, network, silent, noICMP, ispInfo)
 }
 
-func selectServer(servers []defs.Server, network string, c *cli.Context, noICMP bool) defs.Server {
+func selectServer(logPre string, servers []defs.Server, network string, c *cli.Context, noICMP bool) (defs.Server, bool) {
 	if len(servers) > 10 {
 		r := rand.New(rand.NewSource(time.Now().Unix()))
 		r.Shuffle(len(servers), func(i int, j int) {
@@ -346,7 +353,7 @@ func selectServer(servers []defs.Server, network string, c *cli.Context, noICMP 
 		servers = servers[:10]
 	}
 
-	log.Info("Selecting the fastest server based on ping")
+	log.Infof("%sSelecting the fastest server based on ping", logPre)
 
 	var wg sync.WaitGroup
 	jobs := make(chan PingJob, len(servers))
@@ -382,7 +389,8 @@ Loop:
 	}
 
 	if len(pingList) == 0 {
-		log.Fatal("No server is currently available, please try again later.")
+		log.Infof("%sNo server is currently available", logPre)
+		return defs.Server{}, false
 	}
 
 	// get the fastest server's index in the `servers` array
@@ -395,7 +403,8 @@ Loop:
 	}
 
 	// do speed test on the server
-	return servers[serverIdx]
+	log.Debugf("%sSelected %s (%s)", logPre, servers[serverIdx].Name, servers[serverIdx].ID)
+	return servers[serverIdx], true
 }
 
 func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGroup, srcIp, network string, noICMP bool) {

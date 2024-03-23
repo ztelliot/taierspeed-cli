@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/briandowns/spinner"
@@ -120,7 +121,13 @@ func deQueue(s defs.Server, key string) bool {
 func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, noICMP bool, ispInfo *defs.IPInfoResponse) error {
 	if !silent || c.Bool(defs.OptionSimple) {
 		if serverCount := len(servers); serverCount > 1 {
-			fmt.Printf("Testing against %d servers\n", serverCount)
+			fmt.Printf("Testing against %d servers: [ %s ]\n", serverCount, strings.Join(func() []string {
+				var ret []string
+				for _, s := range servers {
+					ret = append(ret, s.Name)
+				}
+				return ret
+			}(), ", "))
 		} else if serverCount == 0 {
 			fmt.Println("No server available")
 			return nil
