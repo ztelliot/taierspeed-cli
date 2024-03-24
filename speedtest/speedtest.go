@@ -233,10 +233,16 @@ func SpeedTest(c *cli.Context) error {
 					continue
 				}
 
+				if sgp == "lo" || sgi == "lo" {
+					if ispInfo == nil || (sgp == "lo" && ispInfo.Province == "") || (sgi == "lo" && ispInfo.ISP == "") {
+						continue
+					}
+				}
+
 				var isp uint8 = 0
 				if sgi != "" {
 					for _, i := range defs.ISPMap {
-						if sgi == strconv.Itoa(int(i.ASN)) || sgi == i.Short {
+						if (sgi != "lo" && (sgi == strconv.Itoa(int(i.ASN)) || sgi == i.Short)) || (sgi == "lo" && (i.Name == ispInfo.ISP || strings.Contains(ispInfo.ISP, i.Name) || strings.Contains(i.Name, ispInfo.ISP))) {
 							isp = i.ID
 						}
 					}
@@ -258,7 +264,11 @@ func SpeedTest(c *cli.Context) error {
 
 			query := "SELECT servers.id, servers.name, host, port, city, isp, download, upload, ping, type, short FROM servers, provinces WHERE province == provinces.id"
 			if g.Province != "" {
-				query += fmt.Sprintf(" AND code == '%s'", g.Province)
+				if g.Province == "lo" {
+					query += fmt.Sprintf(" AND provinces.name LIKE '%%%s%%'", ispInfo.Province)
+				} else {
+					query += fmt.Sprintf(" AND code == '%s'", g.Province)
+				}
 			}
 			if g.ISP != 0 {
 				query += fmt.Sprintf(" AND isp == %d", g.ISP)

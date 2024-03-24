@@ -118,7 +118,10 @@ func main() {
 				Name:    defs.OptionServerGroup,
 				Aliases: []string{defs.OptionServerGroupAlt},
 				Usage: "Specify a `GROUP` of servers by PROVINCE@ISP to test.\n" +
-					"\tCan be supplied multiple times",
+					"\tCan be supplied multiple times.\n" +
+					"\tPROVINCE refer to `GB/T 2260-2007` (bj, sh, gd... etc).\n" +
+					"\tISP can be {ct, cu, cm, cernet, catv, drpeng} or `ASN`.\n" +
+					"\tYou can use `lo` to refer to the current province or ISP",
 			},
 			&cli.StringSliceFlag{
 				Name: defs.OptionExclude,
