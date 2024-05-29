@@ -36,5 +36,10 @@ const (
 	OptionNoPreAllocate  = "no-pre-allocate"
 	OptionVersion        = "version"
 	OptionVersionAlt     = "v"
+	OptionCheckUpdate    = "update"
+	OptionCheckUpdateAlt = "u"
+	OptionAPIBase        = "api-base"
+	OptionAPIVersion     = "api-version"
+	OptionTLSInsecure    = "tls-insecure"
 	OptionDebug          = "debug"
 )

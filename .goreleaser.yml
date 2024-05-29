@@ -11,7 +11,7 @@ builds:
   flags:
     - -trimpath
   ldflags:
-    - -w -s -X "github.com/ztelliot/taierspeed-cli/defs.ProgName={{ .ProjectName }}" -X "github.com/ztelliot/taierspeed-cli/defs.ProgVersion=v{{ .Version }}" -X "github.com/ztelliot/taierspeed-cli/defs.BuildDate={{ .Date }}"
+    - -w -s -X "github.com/ztelliot/taierspeed-cli/defs.ProgName={{ .ProjectName }}" -X "github.com/ztelliot/taierspeed-cli/defs.ProgVersion=v{{ .Version }}" -X "github.com/ztelliot/taierspeed-cli/defs.ProgCommit={{ .Commit }}" -X "github.com/ztelliot/taierspeed-cli/defs.BuildDate={{ .Date }}"
   goos:
     - linux
     - darwin
@@ -34,7 +34,7 @@ builds:
   flags:
     - -trimpath
   ldflags:
-    - -w -s -X "github.com/ztelliot/taierspeed-cli/defs.ProgName={{ .ProjectName }}" -X "github.com/ztelliot/taierspeed-cli/defs.ProgVersion=v{{ .Version }}" -X "github.com/ztelliot/taierspeed-cli/defs.BuildDate={{ .Date }}"
+    - -w -s -X "github.com/ztelliot/taierspeed-cli/defs.ProgName={{ .ProjectName }}" -X "github.com/ztelliot/taierspeed-cli/defs.ProgVersion=v{{ .Version }}" -X "github.com/ztelliot/taierspeed-cli/defs.ProgCommit={{ .Commit }}" -X "github.com/ztelliot/taierspeed-cli/defs.BuildDate={{ .Date }}"
   goos:
     - linux
     - windows
@@ -42,6 +42,13 @@ builds:
   goarch:
     - amd64
     - arm64
+    - mips
+    - mipsle
+    - mips64
+    - mips64le
+  gomips:
+    - hardfloat
+    - softfloat
   ignore:
     - goos: linux
       goarch: amd64

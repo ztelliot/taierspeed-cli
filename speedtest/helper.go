@@ -5,12 +5,15 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +29,8 @@ import (
 
 const (
 	// the default ping count for measuring ping and jitter
-	pingCount = 5
+	pingCount      = 5
+	GlobalSpeedAPI = "https://dlc.cnspeedtest.com:8043"
 )
 
 func getRandom(tok, pre string, l int) string {
@@ -40,6 +44,203 @@ func getRandom(tok, pre string, l int) string {
 		res = append(res, bs[r.Intn(len(bs))])
 	}
 	return pre + string(res)
+}
+
+func codeToCode(provider, code string) string {
+	switch provider {
+	case "azure":
+		switch code {
+		case "East Asia":
+			return "HKG"
+		}
+	case "aws":
+		switch code {
+		case "ap-east-1":
+			return "HKG"
+		case "ap-southeast-1":
+			return "SIN"
+		case "ap-northeast-1":
+			return "NRT"
+		case "ap-northeast-2":
+			return "ICN"
+		case "ap-northeast-3":
+			return "KIX"
+		}
+	case "gcp":
+		switch code {
+		case "asia-northeast1":
+			return "NRT"
+		case "asia-southeast1":
+			return "SIN"
+		}
+	}
+	return code
+}
+
+func coreApiDebug(resp *http.Response) {
+	server := resp.Header.Get("X-Homo-Server")
+	placement := resp.Header.Get("X-Homo-Region")
+	var location string
+	switch server {
+	case "cloudflare":
+		server = "Cloudflare"
+		if lo := strings.Split(resp.Header.Get("Cf-Placement"), "-"); len(lo) > 0 {
+			placement = lo[len(lo)-1]
+		}
+		if lo := strings.Split(resp.Header.Get("Cf-Ray"), "-"); len(lo) > 0 {
+			location = lo[len(lo)-1]
+		}
+	case "azure":
+		server = "Azure"
+		placement = codeToCode("azure", placement)
+		location = "HKG"
+	case "deno":
+		server = "Deno"
+		placement = codeToCode("gcp", placement)
+		if lo := strings.Split(resp.Header.Get("Server"), "/"); len(lo) > 0 {
+			location = lo[len(lo)-1]
+			if strings.HasPrefix(location, "gcp-") {
+				location = codeToCode("gcp", strings.TrimPrefix(location, "gcp-"))
+			}
+		}
+	case "deta":
+		server = "Deta"
+		placement = codeToCode("aws", placement)
+	}
+	if server == "" {
+		log.Debugf("Core API server: %s", resp.Header.Get("Server"))
+	} else {
+		if location != "" && location != placement {
+			log.Debugf("Core API server: %s %s, Edge: [%s]", server, placement, location)
+		} else {
+			log.Debugf("Core API server: %s %s", server, placement)
+		}
+	}
+}
+
+func getServerList(c *cli.Context, servers *[]string, groups *[]string) ([]defs.ServerResponse, error) {
+	coreApi, err := url.Parse(c.String(defs.OptionAPIBase))
+	if err != nil {
+		return nil, err
+	}
+	u := coreApi.JoinPath(c.String(defs.OptionAPIVersion)).JoinPath("node")
+	v := url.Values{}
+	if servers != nil && len(*servers) > 0 {
+		v.Add("server", strings.Join(*servers, ","))
+	}
+	if groups != nil && len(*groups) > 0 {
+		v.Add("group", strings.Join(*groups, ","))
+	}
+	u.RawQuery = v.Encode()
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", defs.ApiUA)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New(resp.Status)
+	}
+
+	if log.GetLevel() == log.DebugLevel {
+		coreApiDebug(resp)
+	}
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var res struct {
+		Code int                   `json:"code"`
+		Data []defs.ServerResponse `json:"data"`
+	}
+	if err = json.Unmarshal(b, &res); err != nil {
+		return nil, err
+	}
+
+	return res.Data, nil
+}
+
+func getVersion(c *cli.Context) (*defs.Version, error) {
+	coreApi, err := url.Parse(c.String(defs.OptionAPIBase))
+	if err != nil {
+		return nil, err
+	}
+	u := coreApi.JoinPath(c.String(defs.OptionAPIVersion)).JoinPath(fmt.Sprintf("version/latest/%s_%s", runtime.GOOS, runtime.GOARCH))
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", defs.ApiUA)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New(resp.Status)
+	}
+
+	if log.GetLevel() == log.DebugLevel {
+		coreApiDebug(resp)
+	}
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var res struct {
+		Code int          `json:"code"`
+		Data defs.Version `json:"data"`
+	}
+	if err = json.Unmarshal(b, &res); err != nil {
+		return nil, err
+	}
+
+	return &res.Data, nil
+}
+
+func getGlobalServerList(ip string) ([]defs.Server, error) {
+	var serversT []defs.ServerGlobal
+
+	uri := fmt.Sprintf("%s/dataServer/mobilematch_list.php?ip=%s&network=4&ipv6=0", GlobalSpeedAPI, ip)
+	req, err := http.NewRequest(http.MethodGet, uri, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", defs.AndroidUA)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err = json.Unmarshal(b, &serversT); err != nil {
+		return nil, err
+	}
+
+	var servers []defs.Server
+	for _, s := range serversT {
+		port, _ := strconv.Atoi(s.Port)
+		servers = append(servers, defs.Server{ID: strconv.Itoa(s.ID), Name: s.Name, IP: s.IP, Host: s.IP, Port: uint16(port), Province: s.Prov, City: s.City, ISP: s.GetISP().ID})
+	}
+	return servers, nil
 }
 
 func enQueue(s defs.Server) string {
@@ -115,6 +316,15 @@ func deQueue(s defs.Server, key string) bool {
 	}
 
 	return true
+}
+
+func MatchProvince(prov string, provinces *[]defs.ProvinceInfo) uint8 {
+	for _, p := range *provinces {
+		if p.Short == prov || p.Name == prov || strings.Contains(p.Name, prov) || strings.Contains(prov, p.Short) {
+			return p.ID
+		}
+	}
+	return 0
 }
 
 // doSpeedTest is where the actual speed test happens
@@ -278,7 +488,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 		}
 
 		//add a new line after each test if testing multiple servers
-		if len(servers) > 1 && !silent {
+		if len(servers) > 1 && (!silent || c.Bool(defs.OptionSimple)) {
 			log.Warn()
 		}
 	}

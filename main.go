@@ -40,6 +40,11 @@ func main() {
 				Usage:   "Show the version number and exit",
 			},
 			&cli.BoolFlag{
+				Name:    defs.OptionCheckUpdate,
+				Aliases: []string{defs.OptionCheckUpdateAlt},
+				Usage:   "Check for updates and exit",
+			},
+			&cli.BoolFlag{
 				Name:    defs.OptionIPv4,
 				Aliases: []string{defs.OptionIPv4Alt},
 				Usage:   "Force IPv4 only",
@@ -162,6 +167,24 @@ func main() {
 					"\tenabled by default to improve upload performance. To\n" +
 					"\tsupport systems with insufficient memory, use this\n" +
 					"\toption to avoid out of memory errors",
+			},
+			&cli.StringFlag{
+				Name:   defs.OptionAPIBase,
+				Usage:  "Core API `URL`",
+				Value:  "https://speed.qwq.vc/api",
+				Hidden: true,
+			},
+			&cli.StringFlag{
+				Name:   defs.OptionAPIVersion,
+				Usage:  "Core API `VERSION`",
+				Value:  "v1",
+				Hidden: true,
+			},
+			&cli.BoolFlag{
+				Name:   defs.OptionTLSInsecure,
+				Usage:  "Disable TLS certificate verification",
+				Value:  false,
+				Hidden: true,
 			},
 			&cli.BoolFlag{
 				Name:    defs.OptionDebug,
