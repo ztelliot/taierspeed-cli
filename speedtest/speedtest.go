@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,8 +23,6 @@ import (
 	"github.com/ztelliot/taierspeed-cli/defs"
 	"github.com/ztelliot/taierspeed-cli/report"
 )
-
-var DomainRe = regexp.MustCompile(`([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.)+([a-zA-Z][-a-zA-Z]{0,62})`)
 
 //go:embed province.csv
 var ProvinceListByte []byte
@@ -196,7 +193,7 @@ func SpeedTest(c *cli.Context) error {
 	}
 
 	simple := true
-	if forceIPv6 || c.Bool(defs.OptionList) || c.IsSet(defs.OptionServer) || c.IsSet(defs.OptionServerGroup) || ispInfo == nil || ispInfo.IP == "" {
+	if forceIPv6 || c.Bool(defs.OptionList) || c.IsSet(defs.OptionServer) || c.IsSet(defs.OptionServerGroup) || ispInfo == nil || ispInfo.IP == "" || ispInfo.Country != "中国" {
 		simple = false
 	}
 
@@ -207,7 +204,7 @@ func SpeedTest(c *cli.Context) error {
 	if simple {
 		var serversT []defs.Server
 
-		if serversT, err = getGlobalServerList(ispInfo.IP); err != nil {
+		if serversT, err = getGlobalServerList(ispInfo.IP, 0); err != nil {
 			log.Errorf("Error when fetching server list: %s", err)
 			return err
 		}
@@ -292,7 +289,9 @@ func SpeedTest(c *cli.Context) error {
 			for s := range _tmpMap {
 				_groups = append(_groups, s)
 			}
-		} else if !forceIPv6 && !c.Bool(defs.OptionList) {
+		}
+
+		if !c.IsSet(defs.OptionServer) && !c.IsSet(defs.OptionServerGroup) && !c.Bool(defs.OptionList) {
 			_groups = append(_groups, "31@1")
 		}
 
@@ -305,31 +304,16 @@ func SpeedTest(c *cli.Context) error {
 			var serversT []defs.Server
 
 			for _, n := range g.Node {
-				if DomainRe.MatchString(n.Host) {
-					if records, err := net.LookupHost(n.Host); err == nil {
-						for _, i := range records {
-							if strings.Contains(i, ":") {
-								n.IPv6 = i
-							} else {
-								n.IP = i
-							}
-						}
+				if n.IP != "" && !forceIPv6 {
+					if n.Host == "" {
+						n.Host = n.IP
+					}
+				} else if n.IPv6 != "" && !forceIPv4 {
+					if n.Host == "" {
+						n.Host = n.IPv6
 					}
 				} else {
-					if strings.Contains(n.Host, ":") {
-						n.IPv6 = n.Host
-					} else {
-						n.IP = n.Host
-					}
-				}
-
-				if forceIPv4 || forceIPv6 {
-					if forceIPv4 && n.IP == "" {
-						continue
-					}
-					if forceIPv6 && n.IPv6 == "" {
-						continue
-					}
+					continue
 				}
 				serversT = append(serversT, n)
 			}

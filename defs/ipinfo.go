@@ -88,7 +88,7 @@ func ipip() (*IPInfoResponse, error) {
 		} `json:"data"`
 	}
 
-	if err := request("https://myip.ipip.net/json", &data); err != nil {
+	if err := request("http://myip6.ipip.net/json", &data); err != nil {
 		return nil, err
 	} else {
 		var ipInfo IPInfoResponse

@@ -64,8 +64,8 @@ const (
 type Server struct {
 	ID          string     `json:"id"`
 	Name        string     `json:"name"`
-	IP          string     `json:"-"`
-	IPv6        string     `json:"-"`
+	IP          string     `json:"ip"`
+	IPv6        string     `json:"ipv6"`
 	Host        string     `json:"host"`
 	Port        uint16     `json:"port"`
 	Prov        uint8      `json:"province"`
@@ -274,7 +274,7 @@ func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration
 
 	doDownload := func() {
 		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !os.IsTimeout(err) {
 			log.Debugf("Failed when making HTTP request: %s", err)
 		} else {
 			defer resp.Body.Close()
@@ -372,7 +372,9 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, up
 		} else if err == nil {
 			defer resp.Body.Close()
 			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-				log.Debugf("Failed when reading HTTP response: %s", err)
+				if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !os.IsTimeout(err) {
+					log.Debugf("Failed when reading HTTP response: %s", err)
+				}
 			}
 
 			uploadDone <- struct{}{}

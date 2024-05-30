@@ -139,6 +139,7 @@ func getServerList(c *cli.Context, servers *[]string, groups *[]string) ([]defs.
 	}
 	req.Header.Set("User-Agent", defs.ApiUA)
 
+	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -156,6 +157,7 @@ func getServerList(c *cli.Context, servers *[]string, groups *[]string) ([]defs.
 		return nil, err
 	}
 	defer resp.Body.Close()
+	log.Debugf("Time taken to get server list: %s", time.Since(start))
 
 	var res struct {
 		Code int                   `json:"code"`
@@ -210,10 +212,10 @@ func getVersion(c *cli.Context) (*defs.Version, error) {
 	return &res.Data, nil
 }
 
-func getGlobalServerList(ip string) ([]defs.Server, error) {
+func getGlobalServerList(ip string, ipv6 int) ([]defs.Server, error) {
 	var serversT []defs.ServerGlobal
 
-	uri := fmt.Sprintf("%s/dataServer/mobilematch_list.php?ip=%s&network=4&ipv6=0", GlobalSpeedAPI, ip)
+	uri := fmt.Sprintf("%s/dataServer/mobilematch_list.php?ip=%s&network=4&ipv6=%d", GlobalSpeedAPI, ip, ipv6)
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, err
@@ -238,7 +240,13 @@ func getGlobalServerList(ip string) ([]defs.Server, error) {
 	var servers []defs.Server
 	for _, s := range serversT {
 		port, _ := strconv.Atoi(s.Port)
-		servers = append(servers, defs.Server{ID: strconv.Itoa(s.ID), Name: s.Name, IP: s.IP, Host: s.IP, Port: uint16(port), Province: s.Prov, City: s.City, ISP: s.GetISP().ID})
+		_s := defs.Server{ID: strconv.Itoa(s.ID), Name: s.Name, Host: s.IP, Port: uint16(port), Province: s.Prov, City: s.City, ISP: s.GetISP().ID}
+		if ipv6 == 0 {
+			_s.IP = s.IP
+		} else {
+			_s.IPv6 = s.IP
+		}
+		servers = append(servers, _s)
 	}
 	return servers, nil
 }
