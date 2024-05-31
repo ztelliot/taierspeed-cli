@@ -274,9 +274,14 @@ func SpeedTest(c *cli.Context) error {
 
 				var isp uint8 = 0
 				if sgi != "" {
-					for _, i := range defs.ISPMap {
-						if (sgi != "lo" && (sgi == strconv.Itoa(int(i.ASN)) || sgi == i.Short)) || (sgi == "lo" && (i.Name == ispInfo.ISP || strings.Contains(ispInfo.ISP, i.Name) || strings.Contains(i.Name, ispInfo.ISP))) {
-							isp = i.ID
+					if sgi == "lo" {
+						isp = MatchISP(ispInfo.ISP)
+					} else {
+						for _, i := range defs.ISPMap {
+							if sgi == strconv.Itoa(int(i.ASN)) || sgi == i.Short {
+								isp = i.ID
+								break
+							}
 						}
 					}
 					if isp == 0 {
@@ -292,7 +297,16 @@ func SpeedTest(c *cli.Context) error {
 		}
 
 		if !c.IsSet(defs.OptionServer) && !c.IsSet(defs.OptionServerGroup) && !c.Bool(defs.OptionList) {
-			_groups = append(_groups, "31@1")
+			if ispInfo != nil && ispInfo.Province != "" && ispInfo.ISP != "" && ispInfo.Country == "中国" {
+				province, isp := MatchProvince(ispInfo.Province, &provinces), MatchISP(ispInfo.ISP)
+				if province != 0 || isp != 0 {
+					_groups = append(_groups, fmt.Sprintf("%d@%d", province, isp))
+				} else {
+					_groups = append(_groups, "44@3")
+				}
+			} else {
+				_groups = append(_groups, "44@3")
+			}
 		}
 
 		groups, err := getServerList(c, &_servers, &_groups)
@@ -322,7 +336,7 @@ func SpeedTest(c *cli.Context) error {
 				serversT = preprocessServers(serversT, c.StringSlice(defs.OptionExclude))
 			}
 
-			if g.Group == "" {
+			if g.Group == "" || c.Bool(defs.OptionList) {
 				servers = append(servers, serversT...)
 			} else {
 				if g.Group != "" {

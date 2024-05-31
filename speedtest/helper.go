@@ -335,6 +335,15 @@ func MatchProvince(prov string, provinces *[]defs.ProvinceInfo) uint8 {
 	return 0
 }
 
+func MatchISP(isp string) uint8 {
+	for _, i := range defs.ISPMap {
+		if i.Name == isp || strings.Contains(isp, i.Name) || strings.Contains(i.Name, isp) {
+			return i.ID
+		}
+	}
+	return 0
+}
+
 // doSpeedTest is where the actual speed test happens
 func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, noICMP bool, ispInfo *defs.IPInfoResponse) error {
 	if !silent || c.Bool(defs.OptionSimple) {
