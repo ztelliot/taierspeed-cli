@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,47 +82,55 @@ type Server struct {
 	NoICMP      bool       `json:"-"`
 }
 
+func (s *Server) URL() *url.URL {
+	u := url.URL{
+		Scheme: "http",
+		Host:   net.JoinHostPort(s.Host, strconv.Itoa(int(s.Port))),
+	}
+	return &u
+}
+
 func (s *Server) DownloadURL() string {
 	if s.DownloadURI != "" {
-		return fmt.Sprintf("http://%s:%d%s", s.Host, s.Port, s.DownloadURI)
+		return fmt.Sprintf("%s%s", s.URL().String(), s.DownloadURI)
 	} else {
 		switch s.Type {
 		case Perception:
-			return fmt.Sprintf("http://%s:%d/speedtest/download", s.Host, s.Port)
+			return fmt.Sprintf("%s/speedtest/download", s.URL().String())
 		case WirelessSpeed:
-			return fmt.Sprintf("http://%s:%d/GSpeedTestServer/download", s.Host, s.Port)
+			return fmt.Sprintf("%s/GSpeedTestServer/download", s.URL().String())
 		default:
-			return fmt.Sprintf("http://%s:%d/speed/File(1G).dl", s.Host, s.Port)
+			return fmt.Sprintf("%s/speed/File(1G).dl", s.URL().String())
 		}
 	}
 }
 
 func (s *Server) UploadURL() string {
 	if s.UploadURI != "" {
-		return fmt.Sprintf("http://%s:%d%s", s.Host, s.Port, s.UploadURI)
+		return fmt.Sprintf("%s%s", s.URL().String(), s.UploadURI)
 	} else {
 		switch s.Type {
 		case Perception:
-			return fmt.Sprintf("http://%s:%d/speedtest/upload", s.Host, s.Port)
+			return fmt.Sprintf("%s/speedtest/upload", s.URL().String())
 		case WirelessSpeed:
-			return fmt.Sprintf("http://%s:%d/GSpeedTestServer/upload", s.Host, s.Port)
+			return fmt.Sprintf("%s/GSpeedTestServer/upload", s.URL().String())
 		default:
-			return fmt.Sprintf("http://%s:%d/speed/doAnalsLoad.do", s.Host, s.Port)
+			return fmt.Sprintf("%s/speed/doAnalsLoad.do", s.URL().String())
 		}
 	}
 }
 
 func (s *Server) PingURL() string {
 	if s.PingURI != "" {
-		return fmt.Sprintf("http://%s:%d%s", s.Host, s.Port, s.PingURI)
+		return fmt.Sprintf("%s%s", s.URL().String(), s.PingURI)
 	} else {
 		switch s.Type {
 		case Perception:
-			return fmt.Sprintf("http://%s:%d/speedtest/ping", s.Host, s.Port)
+			return fmt.Sprintf("%s/speedtest/ping", s.URL().String())
 		case WirelessSpeed:
-			return fmt.Sprintf("http://%s:%d/GSpeedTestServer/", s.Host, s.Port)
+			return fmt.Sprintf("%s/GSpeedTestServer/", s.URL().String())
 		default:
-			return fmt.Sprintf("http://%s:%d/speed/", s.Host, s.Port)
+			return fmt.Sprintf("%s/speed/", s.URL().String())
 		}
 	}
 }

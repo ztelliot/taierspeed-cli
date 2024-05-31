@@ -260,7 +260,7 @@ func enQueue(s defs.Server) string {
 	md5Ctx.Write([]byte(fmt.Sprintf("model=Android&imei=%s&stime=%s", imei, ts)))
 	token := hex.EncodeToString(md5Ctx.Sum(nil))
 
-	url := fmt.Sprintf("http://%s:%d/speed/dovalid?key=&flag=true&bandwidth=200&model=Android&imei=%s&time=%s&token=%s", s.Host, s.Port, imei, ts, token)
+	url := fmt.Sprintf("%s/speed/dovalid?key=&flag=true&bandwidth=200&model=Android&imei=%s&time=%s&token=%s", s.URL().String(), imei, ts, token)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -295,7 +295,7 @@ func enQueue(s defs.Server) string {
 }
 
 func deQueue(s defs.Server, key string) bool {
-	url := fmt.Sprintf("http://%s:%d/speed/dovalid?key=%s", s.Host, s.Port, key)
+	url := fmt.Sprintf("%s/speed/dovalid?key=%s", s.URL().String(), key)
 
 	req, err := http.NewRequest(http.MethodPost, url, nil)
 	if err != nil {
@@ -328,6 +328,9 @@ func deQueue(s defs.Server, key string) bool {
 
 func MatchProvince(prov string, provinces *[]defs.ProvinceInfo) uint8 {
 	for _, p := range *provinces {
+		if p.ID == 0 {
+			continue
+		}
 		if p.Short == prov || p.Name == prov || strings.Contains(p.Name, prov) || strings.Contains(prov, p.Short) {
 			return p.ID
 		}
@@ -337,6 +340,9 @@ func MatchProvince(prov string, provinces *[]defs.ProvinceInfo) uint8 {
 
 func MatchISP(isp string) uint8 {
 	for _, i := range defs.ISPMap {
+		if i.ID == 0 {
+			continue
+		}
 		if i.Name == isp || strings.Contains(isp, i.Name) || strings.Contains(i.Name, isp) {
 			return i.ID
 		}

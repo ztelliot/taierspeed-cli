@@ -51,4 +51,4 @@ jobs:
           HOOKS: ${{ secrets.HOOKS }}
         run: |
           export IFS=";"
-          for hook in $HOOKS; do curl -k -X POST -H "Authorization: $TOKEN" -H "Content-Type: application/json" --data "{\"version\":\"$VERSION\",\"platform\":$PLATFORM}" $hook; done
+          for hook in $HOOKS; do curl -k -X POST -H "Content-Type: application/json" --data "{\"version\":\"$VERSION\",\"platform\":$PLATFORM}" "$hook?token=$TOKEN"; done

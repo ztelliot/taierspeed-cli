@@ -297,8 +297,14 @@ func SpeedTest(c *cli.Context) error {
 		}
 
 		if !c.IsSet(defs.OptionServer) && !c.IsSet(defs.OptionServerGroup) && !c.Bool(defs.OptionList) {
-			if ispInfo != nil && ispInfo.Province != "" && ispInfo.ISP != "" && ispInfo.Country == "中国" {
-				province, isp := MatchProvince(ispInfo.Province, &provinces), MatchISP(ispInfo.ISP)
+			if ispInfo != nil && (ispInfo.Province != "" || ispInfo.ISP != "") && ispInfo.Country == "中国" {
+				province, isp := uint8(0), uint8(0)
+				if ispInfo.Province != "" {
+					province = MatchProvince(ispInfo.Province, &provinces)
+				}
+				if ispInfo.ISP != "" {
+					isp = MatchISP(ispInfo.ISP)
+				}
 				if province != 0 || isp != 0 {
 					_groups = append(_groups, fmt.Sprintf("%d@%d", province, isp))
 				} else {
