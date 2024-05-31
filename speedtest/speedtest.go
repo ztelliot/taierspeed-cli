@@ -59,7 +59,7 @@ func SpeedTest(c *cli.Context) error {
 	// print version
 	if c.Bool(defs.OptionVersion) {
 		log.SetOutput(os.Stdout)
-		log.Warnf("%s %s (built on %s %s)", defs.ProgName, defs.ProgVersion, defs.ProgCommit, defs.BuildDate)
+		log.Warnf("%s %s %s (built on %s)", defs.ProgName, defs.ProgVersion, defs.ProgCommit, defs.BuildDate)
 		log.Warn("Powered by TaierSpeed")
 		log.Warn("Project: https://github.com/ztelliot/taierspeed-cli")
 		log.Warn("Forked: https://github.com/librespeed/speedtest-cli")

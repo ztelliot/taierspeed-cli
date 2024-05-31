@@ -1,5 +1,4 @@
 project_name: 'taierspeed-cli'
-#dist: ./out
 before:
   hooks:
     - go mod download
@@ -57,20 +56,13 @@ builds:
     - goos: darwin
       goarch: amd64
 archives:
-  - format_overrides:
-      - goos: windows
-        format: zip
-    files:
-      - LICENSE
+  - format: binary
 checksum:
   name_template: 'checksums.txt'
 changelog:
   sort: asc
-gitea_urls:
-  api: "{{ .Env.GITEA_URL }}/api/v1"
-  download: "{{ .Env.GITEA_URL }}"
 release:
-  gitea:
+  github:
     owner: ztelliot
     name: taierspeed-cli
   disable: false
@@ -79,5 +71,4 @@ blobs:
     bucket: "{{ .Env.S3_BUCKET }}"
     region: "{{ .Env.S3_REGION }}"
     endpoint: "{{ .Env.S3_ENDPOINT }}"
-    folder: "taierspeed/{{.Version}}"
-
+    folder: "{{ .ProjectName }}/v{{.Version}}"

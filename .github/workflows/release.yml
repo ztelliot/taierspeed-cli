@@ -1,0 +1,54 @@
+name: release
+
+on:
+  pull_request:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Go Releaser
+        id: goreleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          distribution: goreleaser
+          version: "~> v1"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          S3_BUCKET: ${{ secrets.CLOUDFLARE_BUCKET }}
+          S3_REGION: ${{ secrets.CLOUDFLARE_REGION }}
+          S3_ENDPOINT: ${{ secrets.CLOUDFLARE_ENDPOINT }}
+      - name: Generate Metadata
+        id: metadata
+        env:
+          METADATA: "${{ steps.goreleaser.outputs.metadata }}"
+          ARTIFACTS: "${{ steps.goreleaser.outputs.artifacts }}"
+        run: |
+          echo "VERSION=$(echo "$METADATA" | jq -r '.tag')" >> $GITHUB_OUTPUT
+          echo "PLATFORM=$(echo "$ARTIFACTS" | jq -rc '[.[] | select (.internal_type==2) | .name | split("_")[2:] | join("_") | sub("_";"/") | sub(".exe$";"")]')" >> $GITHUB_OUTPUT
+      - name: Hook API
+        env:
+          VERSION: ${{ steps.metadata.outputs.VERSION }}
+          PLATFORM: ${{ steps.metadata.outputs.PLATFORM }}
+          TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          HOOKS: ${{ secrets.HOOKS }}
+        run: |
+          export IFS=";"
+          for hook in $HOOKS; do curl -k -X POST -H "Authorization: $TOKEN" -H "Content-Type: application/json" --data "{\"version\":\"$VERSION\",\"platform\":$PLATFORM}" $hook; done
