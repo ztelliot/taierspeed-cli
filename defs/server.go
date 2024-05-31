@@ -266,12 +266,12 @@ func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	url := s.DownloadURL()
+	uri := s.DownloadURL()
 	if s.Type == GlobalSpeed {
-		url = fmt.Sprintf("%s?key=%s", url, token)
+		uri = fmt.Sprintf("%s?key=%s", uri, token)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return 0, 0, err
@@ -285,8 +285,10 @@ func (s *Server) Download(silent, useBytes, useMebi bool, requests int, duration
 
 	doDownload := func() {
 		resp, err := http.DefaultClient.Do(req)
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !os.IsTimeout(err) {
-			log.Debugf("Failed when making HTTP request: %s", err)
+		if err != nil {
+			if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !os.IsTimeout(err) {
+				log.Debugf("Failed when making HTTP request: %s", err)
+			}
 		} else {
 			defer resp.Body.Close()
 
@@ -378,9 +380,11 @@ func (s *Server) Upload(noPrealloc, silent, useBytes, useMebi bool, requests, up
 
 	doUpload := func() {
 		resp, err := http.DefaultClient.Do(req)
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !os.IsTimeout(err) {
-			log.Debugf("Failed when making HTTP request: %s", err)
-		} else if err == nil {
+		if err != nil {
+			if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !os.IsTimeout(err) {
+				log.Debugf("Failed when making HTTP request: %s", err)
+			}
+		} else {
 			defer resp.Body.Close()
 			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 				if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && !os.IsTimeout(err) {
