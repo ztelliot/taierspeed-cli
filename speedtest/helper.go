@@ -27,23 +27,16 @@ import (
 	"github.com/ztelliot/taierspeed-cli/report"
 )
 
-const (
-	// the default ping count for measuring ping and jitter
-	pingCount      = 5
-	GlobalSpeedAPI = "https://dlc.cnspeedtest.com:8043"
-)
+const GlobalSpeedAPI = "https://dlc.cnspeedtest.com:8043"
 
-func getRandom(tok, pre string, l int) string {
-	if tok == "" {
-		tok = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	}
-	bs := []byte(tok)
+func getRandom() string {
+	bs := []byte("0123456789ABCDEF")
 	var res []byte
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := 0; i < l; i++ {
+	for i := 0; i < 16; i++ {
 		res = append(res, bs[r.Intn(len(bs))])
 	}
-	return pre + string(res)
+	return "TS" + string(res)
 }
 
 func codeToCode(provider, code string) string {
@@ -256,7 +249,7 @@ func getGlobalServerList(ip string, ipv6 int) ([]defs.Server, error) {
 func enQueue(s defs.Server) string {
 	time.Local, _ = time.LoadLocation("Asia/Chongqing")
 	ts := strconv.Itoa(int(time.Now().Local().Unix()))
-	imei := getRandom("0123456789ABCDEF", "TS", 16)
+	imei := getRandom()
 
 	md5Ctx := md5.New()
 	md5Ctx.Write([]byte(fmt.Sprintf("model=Android&imei=%s&stime=%s", imei, ts)))
@@ -400,7 +393,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			// skip ICMP if option given
 			currentServer.NoICMP = noICMP
 
-			p, jitter, err := currentServer.ICMPPingAndJitter(pingCount, c.String(defs.OptionSource), network)
+			p, jitter, err := currentServer.ICMPPingAndJitter(c.Int(defs.OptionPingCount), c.String(defs.OptionSource), network)
 			if err != nil {
 				log.Errorf("Failed to get ping and jitter: %s", err)
 				return err

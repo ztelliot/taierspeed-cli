@@ -75,6 +75,12 @@ func main() {
 				Usage:   "Concurrent HTTP requests being made",
 				Value:   3,
 			},
+			&cli.IntFlag{
+				Name:    defs.OptionPingCount,
+				Aliases: []string{defs.OptionPingCountAlt},
+				Usage:   "Count of ICMP or HTTP ping packets to send",
+				Value:   5,
+			},
 			&cli.BoolFlag{
 				Name: defs.OptionBytes,
 				Usage: "Display values in bytes instead of bits. Does not affect\n" +
@@ -126,6 +132,7 @@ func main() {
 					"\tCan be supplied multiple times.\n" +
 					"\tPROVINCE refer to `GB/T 2260-2007` (bj, sh, gd... etc).\n" +
 					"\tISP can be {ct, cu, cm, cernet, catv, drpeng} or `ASN`.\n" +
+					"\tYou can omit one to select all, dont forget to add `@`.\n" +
 					"\tYou can use `lo` to refer to the current province or ISP",
 			},
 			&cli.StringSliceFlag{

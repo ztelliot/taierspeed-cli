@@ -11,6 +11,8 @@ const (
 	OptionNoICMP         = "no-icmp"
 	OptionConcurrent     = "concurrent"
 	OptionConcurrentAlt  = "n"
+	OptionPingCount      = "ping-count"
+	OptionPingCountAlt   = "c"
 	OptionBytes          = "bytes"
 	OptionMebiBytes      = "mebibytes"
 	OptionSimple         = "simple"
