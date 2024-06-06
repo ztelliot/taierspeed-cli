@@ -144,6 +144,8 @@ func getServerList(c *cli.Context, servers *[]string, groups *[]string) ([]defs.
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.New(resp.Status)
 	}
@@ -156,7 +158,7 @@ func getServerList(c *cli.Context, servers *[]string, groups *[]string) ([]defs.
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+
 	log.Debugf("Time taken to get server list: %s", time.Since(start))
 
 	var res struct {
@@ -187,6 +189,8 @@ func getVersion(c *cli.Context) (*defs.Version, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.New(resp.Status)
 	}
@@ -199,7 +203,6 @@ func getVersion(c *cli.Context) (*defs.Version, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 
 	var res struct {
 		Code int          `json:"code"`
@@ -226,12 +229,16 @@ func getGlobalServerList(ip string, ipv6 int) ([]defs.Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New(resp.Status)
+	}
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 
 	if err = json.Unmarshal(b, &serversT); err != nil {
 		return nil, err
@@ -240,12 +247,7 @@ func getGlobalServerList(ip string, ipv6 int) ([]defs.Server, error) {
 	var servers []defs.Server
 	for _, s := range serversT {
 		port, _ := strconv.Atoi(s.Port)
-		_s := defs.Server{ID: strconv.Itoa(s.ID), Name: s.Name, Host: s.IP, Port: uint16(port), Province: s.Prov, City: s.City, ISP: s.GetISP().ID}
-		if ipv6 == 0 {
-			_s.IP = s.IP
-		} else {
-			_s.IPv6 = s.IP
-		}
+		_s := defs.Server{ID: strconv.Itoa(s.ID), Name: s.Name, Target: s.IP, Port: uint16(port), Province: s.Prov, City: s.City, ISP: s.GetISP().ID}
 		servers = append(servers, _s)
 	}
 	return servers, nil
@@ -260,9 +262,10 @@ func enQueue(s defs.Server) string {
 	md5Ctx.Write([]byte(fmt.Sprintf("model=Android&imei=%s&stime=%s", imei, ts)))
 	token := hex.EncodeToString(md5Ctx.Sum(nil))
 
-	url := fmt.Sprintf("%s/speed/dovalid?key=&flag=true&bandwidth=200&model=Android&imei=%s&time=%s&token=%s", s.URL().String(), imei, ts, token)
+	uri := s.URL().JoinPath("/speed/dovalid")
+	uri.RawQuery = fmt.Sprintf("key=&flag=true&bandwidth=200&model=Android&imei=%s&time=%s&token=%s", imei, ts, token)
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequest(http.MethodGet, uri.String(), nil)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return ""
@@ -276,28 +279,22 @@ func enQueue(s defs.Server) string {
 	}
 	defer resp.Body.Close()
 
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
+	if b, err := io.ReadAll(resp.Body); err != nil {
 		log.Debugf("Failed when reading HTTP response: %s", err)
 		return ""
-	}
-
-	if resp.StatusCode != http.StatusOK {
+	} else if resp.StatusCode != http.StatusOK || len(b) <= 0 {
 		log.Debugf("Failed with %d: %s", resp.StatusCode, b)
 		return ""
+	} else {
+		return string(b)[2:]
 	}
-
-	if len(b) <= 0 {
-		return ""
-	}
-
-	return string(b)[2:]
 }
 
 func deQueue(s defs.Server, key string) bool {
-	url := fmt.Sprintf("%s/speed/dovalid?key=%s", s.URL().String(), key)
+	uri := s.URL().JoinPath("/speed/dovalid")
+	uri.RawQuery = fmt.Sprintf("key=%s", key)
 
-	req, err := http.NewRequest(http.MethodPost, url, nil)
+	req, err := http.NewRequest(http.MethodPost, uri.String(), nil)
 	if err != nil {
 		log.Debugf("Failed when creating HTTP request: %s", err)
 		return false
@@ -313,13 +310,11 @@ func deQueue(s defs.Server, key string) bool {
 	}
 	defer resp.Body.Close()
 
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
+	if b, err := io.ReadAll(resp.Body); err != nil {
 		log.Debugf("Failed when reading HTTP response: %s", err)
 		return false
-	}
-
-	if len(b) <= 0 {
+	} else if resp.StatusCode != http.StatusOK || len(b) <= 0 {
+		log.Debugf("Failed with %d: %s", resp.StatusCode, b)
 		return false
 	}
 
@@ -386,14 +381,11 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 	// fetch current user's IP info
 	for _, currentServer := range servers {
 		if !silent || c.Bool(defs.OptionSimple) {
-			name, ip := currentServer.Name, currentServer.IP
+			name := currentServer.Name
 			if currentServer.Type == defs.Perception {
 				name = fmt.Sprintf("%s - %s", currentServer.Name, defs.ISPMap[currentServer.ISP].Name)
 			}
-			if network == "ip6" {
-				ip = currentServer.IPv6
-			}
-			fmt.Printf("Server:\t\t%s [%s] (id = %s)\n", name, ip, currentServer.ID)
+			fmt.Printf("Server:\t\t%s [%s] (id = %s)\n", name, currentServer.Target, currentServer.ID)
 		}
 
 		if currentServer.IsUp() {
@@ -493,12 +485,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 				rep.BytesSent = bytesWritten
 
 				rep.ID = currentServer.ID
-				switch network {
-				case "ip6":
-					rep.IP = currentServer.IPv6
-				default:
-					rep.IP = currentServer.IP
-				}
+				rep.IP = currentServer.Target
 				rep.Name = currentServer.Name
 				rep.Province = currentServer.Province
 				rep.City = currentServer.City

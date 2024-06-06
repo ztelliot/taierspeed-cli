@@ -186,7 +186,6 @@ func SpeedTest(c *cli.Context) error {
 
 	var ispInfo *defs.IPInfoResponse
 	var servers []defs.Server
-	var err error
 
 	if !c.Bool(defs.OptionList) {
 		ispInfo, _ = defs.GetIPInfo()
@@ -202,18 +201,17 @@ func SpeedTest(c *cli.Context) error {
 
 	excludes := c.StringSlice(defs.OptionExclude)
 	if simple {
-		var serversT []defs.Server
-
-		if serversT, err = getGlobalServerList(ispInfo.IP, 0); err != nil {
+		if serversT, err := getGlobalServerList(ispInfo.IP, 0); err != nil {
 			log.Errorf("Error when fetching server list: %s", err)
 			return err
-		}
-		if len(excludes) > 0 {
-			serversT = preprocessServers(serversT, excludes)
-		}
-		log.Debugf("Find %d servers", len(serversT))
-		if server, ok := selectServer("", serversT, network, c, noICMP); ok {
-			servers = append(servers, server)
+		} else {
+			if len(excludes) > 0 {
+				serversT = preprocessServers(serversT, excludes)
+			}
+			log.Debugf("Find %d servers", len(serversT))
+			if server, ok := selectServer("", serversT, network, c, noICMP); ok {
+				servers = append(servers, server)
+			}
 		}
 	} else {
 		var provinces []defs.ProvinceInfo
@@ -325,13 +323,9 @@ func SpeedTest(c *cli.Context) error {
 
 			for _, n := range g.Node {
 				if n.IP != "" && !forceIPv6 {
-					if n.Host == "" {
-						n.Host = n.IP
-					}
+					n.Target = n.IP
 				} else if n.IPv6 != "" && !forceIPv4 {
-					if n.Host == "" {
-						n.Host = n.IPv6
-					}
+					n.Target = n.IPv6
 				} else {
 					continue
 				}
@@ -363,11 +357,8 @@ func SpeedTest(c *cli.Context) error {
 
 	log.Debugf("Selected %d servers", len(servers))
 	if len(servers) == 0 {
-		err = errors.New("specified server(s) not found")
-	}
-
-	if err != nil {
-		log.Errorf("Error when parsing server list: %s", err)
+		err := errors.New("specified server(s) not found")
+		log.Errorf("Error when selecting server: %s", err)
 		return err
 	}
 
@@ -465,7 +456,7 @@ func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGro
 			// if server is up, get ping
 			ping, _, err := server.ICMPPingAndJitter(1, srcIp, network)
 			if err != nil {
-				log.Debugf("Can't ping server %s (%s), skipping", server.Name, server.IP)
+				log.Debugf("Can't ping server %s (%s), skipping", server.Name, server.Target)
 				wg.Done()
 				return
 			}
