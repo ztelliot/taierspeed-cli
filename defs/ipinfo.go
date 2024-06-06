@@ -2,6 +2,7 @@ package defs
 
 import (
 	"encoding/json"
+	"errors"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
@@ -29,6 +30,10 @@ func request(url string, obj any) error {
 		return err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New(resp.Status)
+	}
 
 	if b, err := io.ReadAll(resp.Body); err != nil {
 		log.Debugf("Failed when reading HTTP response: %s", err)
@@ -105,15 +110,11 @@ func GetIPInfo() (*IPInfoResponse, error) {
 	var ipInfo *IPInfoResponse
 	var err error
 
-	if ipInfo, err = uPai(); err != nil || ipInfo.IP == "" {
-		if ipInfo, err = ipip(); err != nil || ipInfo.IP == "" {
-			if ipInfo, err = bilibiliLive(); err != nil || ipInfo.IP == "" {
-				if ipInfo, err = bilibili(); err != nil || ipInfo.IP == "" {
-					return nil, err
-				}
-			}
+	for _, f := range []func() (*IPInfoResponse, error){uPai, ipip, bilibiliLive, bilibili} {
+		if ipInfo, err = f(); err == nil && ipInfo.IP != "" {
+			return ipInfo, nil
 		}
 	}
 
-	return ipInfo, nil
+	return nil, err
 }
