@@ -47,6 +47,9 @@ func (s *ServerGlobal) GetISP() *ISPInfo {
 		return &DRPENG
 	default:
 		for _, isp := range ISPMap {
+			if isp.ID == 0 {
+				continue
+			}
 			if strings.HasSuffix(s.Name, isp.Name) {
 				return isp
 			}

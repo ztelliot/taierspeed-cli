@@ -234,19 +234,21 @@ func getGlobalServerList(ip string, ipv6 int) ([]defs.Server, error) {
 		return nil, errors.New(resp.Status)
 	}
 
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
+	if b, err := io.ReadAll(resp.Body); err != nil {
 		return nil, err
-	}
-
-	if err = json.Unmarshal(b, &serversT); err != nil {
+	} else if err = json.Unmarshal(b, &serversT); err != nil {
 		return nil, err
 	}
 
 	var servers []defs.Server
 	for _, s := range serversT {
 		port, _ := strconv.Atoi(s.Port)
-		_s := defs.Server{ID: strconv.Itoa(s.ID), Name: s.Name, Target: s.IP, Port: uint16(port), Province: s.Prov, City: s.City, ISP: s.GetISP().ID}
+		_s := defs.Server{ID: strconv.Itoa(s.ID), Name: s.Name, Target: s.IP, Port: uint16(port), Province: s.Prov, City: s.City, ISP: s.GetISP().ID, Type: defs.GlobalSpeed}
+		if ipv6 == 1 {
+			_s.IPv6 = s.IP
+		} else {
+			_s.IP = s.IP
+		}
 		servers = append(servers, _s)
 	}
 	return servers, nil

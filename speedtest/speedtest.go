@@ -187,12 +187,14 @@ func SpeedTest(c *cli.Context) error {
 	var ispInfo *defs.IPInfoResponse
 	var servers []defs.Server
 
-	if !c.Bool(defs.OptionList) {
+	simple := true
+	if forceIPv6 || c.IsSet(defs.OptionServer) || c.IsSet(defs.OptionServerGroup) {
+		simple = false
+	}
+	if simple || !c.Bool(defs.OptionList) {
 		ispInfo, _ = defs.GetIPInfo()
 	}
-
-	simple := true
-	if forceIPv6 || c.Bool(defs.OptionList) || c.IsSet(defs.OptionServer) || c.IsSet(defs.OptionServerGroup) || ispInfo == nil || ispInfo.IP == "" || ispInfo.Country != "中国" {
+	if ispInfo == nil || ispInfo.IP == "" || ispInfo.Country != "中国" {
 		simple = false
 	}
 
@@ -208,9 +210,14 @@ func SpeedTest(c *cli.Context) error {
 			if len(excludes) > 0 {
 				serversT = preprocessServers(serversT, excludes)
 			}
-			log.Debugf("Find %d servers", len(serversT))
-			if server, ok := selectServer("", serversT, network, c, noICMP); ok {
-				servers = append(servers, server)
+
+			if c.Bool(defs.OptionList) {
+				servers = append(servers, serversT...)
+			} else {
+				log.Debugf("Find %d servers", len(serversT))
+				if server, ok := selectServer("", serversT, network, c, noICMP); ok {
+					servers = append(servers, server)
+				}
 			}
 		}
 	} else {
