@@ -322,8 +322,8 @@ func deQueue(s defs.Server, key string) bool {
 	return true
 }
 
-func MatchProvince(prov string, provinces *[]defs.ProvinceInfo) uint8 {
-	for _, p := range *provinces {
+func MatchProvince(prov string, provinceMap *map[uint8]defs.ProvinceInfo) uint8 {
+	for _, p := range *provinceMap {
 		if p.ID == 0 {
 			continue
 		}

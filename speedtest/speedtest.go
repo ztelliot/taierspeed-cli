@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"github.com/jedib0t/go-pretty/v6/table"
 	"math"
 	"math/rand"
 	"net"
@@ -186,6 +187,7 @@ func SpeedTest(c *cli.Context) error {
 
 	var ispInfo *defs.IPInfoResponse
 	var servers []defs.Server
+	var provinceMap map[uint8]defs.ProvinceInfo = nil
 
 	simple := true
 	if forceIPv6 || c.IsSet(defs.OptionServer) || c.IsSet(defs.OptionServerGroup) {
@@ -221,13 +223,6 @@ func SpeedTest(c *cli.Context) error {
 			}
 		}
 	} else {
-		var provinces []defs.ProvinceInfo
-		gocsv.UnmarshalBytes(ProvinceListByte, &provinces)
-		provinceMap := make(map[uint8]defs.ProvinceInfo)
-		for _, p := range provinces {
-			provinceMap[p.ID] = p
-		}
-
 		var _servers []string
 		if c.IsSet(defs.OptionServer) {
 			_tmpMap := make(map[string]byte)
@@ -241,6 +236,7 @@ func SpeedTest(c *cli.Context) error {
 
 		var _groups []string
 		if c.IsSet(defs.OptionServerGroup) {
+			provinceMap = initProvinceMap()
 			_tmpMap := make(map[string]byte)
 			for _, s := range c.StringSlice(defs.OptionServerGroup) {
 				sg := strings.Split(s, "@")
@@ -263,9 +259,9 @@ func SpeedTest(c *cli.Context) error {
 				var province uint8 = 0
 				if sgp != "" {
 					if sgp == "lo" {
-						province = MatchProvince(ispInfo.Province, &provinces)
+						province = MatchProvince(ispInfo.Province, &provinceMap)
 					} else {
-						for _, p := range provinces {
+						for _, p := range provinceMap {
 							if p.Code == sgp {
 								province = p.ID
 								break
@@ -303,9 +299,12 @@ func SpeedTest(c *cli.Context) error {
 
 		if !c.IsSet(defs.OptionServer) && !c.IsSet(defs.OptionServerGroup) && !c.Bool(defs.OptionList) {
 			if ispInfo != nil && (ispInfo.Province != "" || ispInfo.ISP != "") && ispInfo.Country == "中国" {
+				if provinceMap == nil {
+					provinceMap = initProvinceMap()
+				}
 				province, isp := uint8(0), uint8(0)
 				if ispInfo.Province != "" {
-					province = MatchProvince(ispInfo.Province, &provinces)
+					province = MatchProvince(ispInfo.Province, &provinceMap)
 				}
 				if ispInfo.ISP != "" {
 					isp = MatchISP(ispInfo.ISP)
@@ -347,6 +346,9 @@ func SpeedTest(c *cli.Context) error {
 				servers = append(servers, serversT...)
 			} else {
 				if g.Group != "" {
+					if provinceMap == nil {
+						provinceMap = initProvinceMap()
+					}
 					_g := strings.Split(g.Group, "@")
 					province, _ := strconv.Atoi(_g[0])
 					isp, _ := strconv.Atoi(_g[1])
@@ -371,20 +373,45 @@ func SpeedTest(c *cli.Context) error {
 
 	// if --list is given, list all the servers fetched and exit
 	if c.Bool(defs.OptionList) {
+		if provinceMap == nil {
+			provinceMap = initProvinceMap()
+		}
+		t := table.NewWriter()
+		t.SetOutputMirror(os.Stdout)
+		t.AppendHeader(table.Row{"ID", "Name", "Prov", "City", "ISP", "v4", "v6"})
+
 		for _, svr := range servers {
-			var stacks []string
+			province := svr.Province
+			if province == "" && svr.Prov != 0 {
+				province = provinceMap[svr.Prov].Short
+			}
+			v4, v6 := "N", "N"
 			if svr.IP != "" {
-				stacks = append(stacks, "IPv4")
+				v4 = "Y"
 			}
 			if svr.IPv6 != "" {
-				stacks = append(stacks, "IPv6")
+				v6 = "Y"
 			}
-			fmt.Printf("%s: %s (%s%s) %v\n", svr.ID, svr.Name, svr.Province, defs.ISPMap[svr.ISP].Name, stacks)
+			t.AppendRow(table.Row{svr.ID, svr.Name, province, svr.City, defs.ISPMap[svr.ISP].Name, v4, v6})
 		}
+
+		t.Style().Options.DrawBorder = false
+		t.Style().Options.SeparateColumns = false
+		t.Render()
 		return nil
 	}
 
 	return doSpeedTest(c, servers, network, silent, noICMP, ispInfo)
+}
+
+func initProvinceMap() map[uint8]defs.ProvinceInfo {
+	var provinces []defs.ProvinceInfo
+	gocsv.UnmarshalBytes(ProvinceListByte, &provinces)
+	provinceMap := make(map[uint8]defs.ProvinceInfo)
+	for _, p := range provinces {
+		provinceMap[p.ID] = p
+	}
+	return provinceMap
 }
 
 func selectServer(logPre string, servers []defs.Server, network string, c *cli.Context, noICMP bool) (defs.Server, bool) {
