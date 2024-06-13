@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -26,8 +25,6 @@ import (
 	"github.com/ztelliot/taierspeed-cli/defs"
 	"github.com/ztelliot/taierspeed-cli/report"
 )
-
-const GlobalSpeedAPI = "https://dlc.cnspeedtest.com:8043"
 
 func getRandom() string {
 	bs := []byte("0123456789ABCDEF")
@@ -109,6 +106,69 @@ func coreApiDebug(resp *http.Response) {
 			log.Debugf("Core API server: %s %s", server, placement)
 		}
 	}
+}
+
+func getServerMatch(c *cli.Context, ispInfo *defs.IPInfoResponse, stack defs.Stack) ([]defs.Server, error) {
+	coreApi, err := url.Parse(c.String(defs.OptionAPIBase))
+	if err != nil {
+		return nil, err
+	}
+	u := coreApi.JoinPath(c.String(defs.OptionAPIVersion)).JoinPath("node/match")
+	v := url.Values{}
+	if ispInfo != nil && ispInfo.ProvId != 0 {
+		v.Add("province", strconv.Itoa(int(ispInfo.ProvId)))
+	}
+	if ispInfo != nil && ispInfo.ISPId != 0 {
+		v.Add("isp", strconv.Itoa(int(ispInfo.ISPId)))
+	}
+	if ispInfo != nil && ispInfo.City != "" {
+		v.Add("city", ispInfo.City)
+	}
+	if stack != defs.StackAll {
+		v.Add("stack", strconv.Itoa(int(stack)))
+	}
+	u.RawQuery = v.Encode()
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", defs.ApiUA)
+
+	start := time.Now()
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if log.GetLevel() == log.DebugLevel {
+		coreApiDebug(resp)
+	}
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debugf("Time taken to get server list: %s", time.Since(start))
+
+	if resp.StatusCode != http.StatusOK {
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+			return nil, fmt.Errorf("%s: %s", resp.Status, b)
+		}
+		return nil, fmt.Errorf("%s", resp.Status)
+	}
+
+	var res struct {
+		Code int           `json:"code"`
+		Data []defs.Server `json:"data"`
+	}
+	if err = json.Unmarshal(b, &res); err != nil {
+		return nil, err
+	}
+
+	return res.Data, nil
 }
 
 func getServerList(c *cli.Context, servers *[]string, groups *[]string, stack defs.Stack) ([]defs.ServerResponse, error) {
@@ -215,46 +275,6 @@ func getVersion(c *cli.Context) (*defs.Version, error) {
 	}
 
 	return &res.Data, nil
-}
-
-func getGlobalServerList(ip string, ipv6 int) ([]defs.Server, error) {
-	var serversT []defs.ServerGlobal
-
-	uri := fmt.Sprintf("%s/dataServer/mobilematch_list.php?ip=%s&network=4&ipv6=%d", GlobalSpeedAPI, ip, ipv6)
-	req, err := http.NewRequest(http.MethodGet, uri, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", defs.AndroidUA)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New(resp.Status)
-	}
-
-	if b, err := io.ReadAll(resp.Body); err != nil {
-		return nil, err
-	} else if err = json.Unmarshal(b, &serversT); err != nil {
-		return nil, err
-	}
-
-	var servers []defs.Server
-	for _, s := range serversT {
-		port, _ := strconv.Atoi(s.Port)
-		_s := defs.Server{ID: strconv.Itoa(s.ID), Name: s.Name, Target: s.IP, Port: uint16(port), Province: s.Prov, City: s.City, ISP: s.GetISP().ID, Type: defs.GlobalSpeed}
-		if ipv6 == 1 {
-			_s.IPv6 = s.IP
-		} else {
-			_s.IP = s.IP
-		}
-		servers = append(servers, _s)
-	}
-	return servers, nil
 }
 
 func enQueue(s defs.Server) string {
@@ -517,7 +537,11 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			os.Stdout.WriteString(buf.String())
 		}
 	} else if c.Bool(defs.OptionJSON) {
-		if b, err := json.Marshal(&report.JSONReport{Client: *ispInfo, Results: repsOut}); err != nil {
+		jr := report.JSONReport{Results: repsOut}
+		if ispInfo != nil {
+			jr.Client = *ispInfo
+		}
+		if b, err := json.Marshal(&jr); err != nil {
 			log.Errorf("Error generating JSON report: %s", err)
 		} else {
 			os.Stdout.Write(b[:])

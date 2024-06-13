@@ -12,51 +12,12 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/briandowns/spinner"
 	"github.com/go-ping/ping"
 	log "github.com/sirupsen/logrus"
 )
-
-type ServerGlobal struct {
-	ID   int    `json:"hostid,string"`
-	Name string `json:"hostname"`
-	IP   string `json:"hostip"`
-	Port string `json:"port"`
-	Prov string `json:"pname"`
-	City string `json:"city"`
-	Loc  string `json:"location,omitempty"`
-	ISP  string `json:"oper,omitempty"`
-}
-
-func (s *ServerGlobal) GetISP() *ISPInfo {
-	switch s.ISP {
-	case "电信":
-		return &TELECOM
-	case "联通":
-		return &UNICOM
-	case "移动":
-		return &MOBILE
-	case "教育网":
-		return &CERNET
-	case "广电网":
-		return &CATV
-	case "鹏博士":
-		return &DRPENG
-	default:
-		for _, isp := range ISPMap {
-			if isp.ID == 0 {
-				continue
-			}
-			if strings.HasSuffix(s.Name, isp.Name) {
-				return isp
-			}
-		}
-		return &DEFISP
-	}
-}
 
 type ServerType uint8
 

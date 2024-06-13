@@ -12,8 +12,10 @@ type IPInfoResponse struct {
 	IP       string `json:"addr"`
 	Country  string `json:"country"`
 	Province string `json:"province"`
+	ProvId   uint8  `json:"-"`
 	City     string `json:"city"`
 	ISP      string `json:"isp"`
+	ISPId    uint8  `json:"-"`
 }
 
 func request(url string, obj any) error {

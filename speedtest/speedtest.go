@@ -194,7 +194,7 @@ func SpeedTest(c *cli.Context) error {
 	var provinceMap map[uint8]defs.ProvinceInfo = nil
 
 	simple := true
-	if forceIPv6 || c.IsSet(defs.OptionServer) || c.IsSet(defs.OptionServerGroup) {
+	if c.IsSet(defs.OptionServer) || c.IsSet(defs.OptionServerGroup) {
 		simple = false
 	}
 	hasLo := false
@@ -207,11 +207,19 @@ func SpeedTest(c *cli.Context) error {
 		}
 
 	}
-	if simple || !c.Bool(defs.OptionList) || forceIPv6 || (c.IsSet(defs.OptionServerGroup) && hasLo) {
+	if simple || !c.Bool(defs.OptionList) || (c.IsSet(defs.OptionServerGroup) && hasLo) {
 		ispInfo, _ = defs.GetIPInfo()
-	}
-	if ispInfo == nil || ispInfo.IP == "" || ispInfo.Country != "中国" {
-		simple = false
+		if ispInfo != nil {
+			if ispInfo.Country == "中国" {
+				if ispInfo.Province != "" {
+					provinceMap = initProvinceMap()
+					ispInfo.ProvId = MatchProvince(ispInfo.Province, &provinceMap)
+				}
+				if ispInfo.ISP != "" {
+					ispInfo.ISPId = MatchISP(ispInfo.ISP)
+				}
+			}
+		}
 	}
 
 	// fetch the server list JSON and parse it into the `servers` array
@@ -219,13 +227,11 @@ func SpeedTest(c *cli.Context) error {
 
 	excludes := c.StringSlice(defs.OptionExclude)
 	if simple {
-		if serversT, err := getGlobalServerList(ispInfo.IP, 0); err != nil {
+		if serversT, err := getServerMatch(c, ispInfo, stack); err != nil {
 			log.Errorf("Error when fetching server list: %s", err)
 			return err
 		} else {
-			if len(excludes) > 0 {
-				serversT = preprocessServers(serversT, excludes)
-			}
+			serversT = preprocessServers(stack, serversT, excludes)
 
 			if c.Bool(defs.OptionList) {
 				servers = append(servers, serversT...)
@@ -250,7 +256,9 @@ func SpeedTest(c *cli.Context) error {
 
 		var _groups []string
 		if c.IsSet(defs.OptionServerGroup) {
-			provinceMap = initProvinceMap()
+			if provinceMap == nil {
+				provinceMap = initProvinceMap()
+			}
 			_tmpMap := make(map[string]byte)
 			for _, s := range c.StringSlice(defs.OptionServerGroup) {
 				sg := strings.Split(s, "@")
@@ -273,7 +281,9 @@ func SpeedTest(c *cli.Context) error {
 				var province uint8 = 0
 				if sgp != "" {
 					if sgp == "lo" {
-						province = MatchProvince(ispInfo.Province, &provinceMap)
+						if ispInfo != nil {
+							province = ispInfo.ProvId
+						}
 					} else {
 						for _, p := range provinceMap {
 							if p.Code == sgp {
@@ -290,7 +300,9 @@ func SpeedTest(c *cli.Context) error {
 				var isp uint8 = 0
 				if sgi != "" {
 					if sgi == "lo" {
-						isp = MatchISP(ispInfo.ISP)
+						if ispInfo != nil {
+							isp = ispInfo.ISPId
+						}
 					} else {
 						for _, i := range defs.ISPMap {
 							if sgi == strconv.Itoa(int(i.ASN)) || sgi == i.Short {
@@ -311,28 +323,6 @@ func SpeedTest(c *cli.Context) error {
 			}
 		}
 
-		if !c.IsSet(defs.OptionServer) && !c.IsSet(defs.OptionServerGroup) {
-			if ispInfo != nil && (ispInfo.Province != "" || ispInfo.ISP != "") && ispInfo.Country == "中国" {
-				if provinceMap == nil {
-					provinceMap = initProvinceMap()
-				}
-				province, isp := uint8(0), uint8(0)
-				if ispInfo.Province != "" {
-					province = MatchProvince(ispInfo.Province, &provinceMap)
-				}
-				if ispInfo.ISP != "" {
-					isp = MatchISP(ispInfo.ISP)
-				}
-				if province != 0 || isp != 0 {
-					_groups = append(_groups, fmt.Sprintf("%d@%d", province, isp))
-				} else {
-					_groups = append(_groups, "44@3")
-				}
-			} else {
-				_groups = append(_groups, "44@3")
-			}
-		}
-
 		if c.IsSet(defs.OptionServerGroup) && len(_groups) == 0 {
 			err := errors.New("specified server group(s) not found")
 			log.Errorf("Error when selecting server: %s", err)
@@ -345,22 +335,7 @@ func SpeedTest(c *cli.Context) error {
 			return err
 		}
 		for _, g := range groups {
-			var serversT []defs.Server
-
-			for _, n := range g.Node {
-				if n.IP != "" && !forceIPv6 {
-					n.Target = n.IP
-				} else if n.IPv6 != "" && !forceIPv4 {
-					n.Target = n.IPv6
-				} else {
-					continue
-				}
-				serversT = append(serversT, n)
-			}
-
-			if len(excludes) > 0 {
-				serversT = preprocessServers(serversT, c.StringSlice(defs.OptionExclude))
-			}
+			serversT := preprocessServers(stack, g.Node, excludes)
 
 			if g.Group == "" || c.Bool(defs.OptionList) {
 				servers = append(servers, serversT...)
@@ -526,11 +501,18 @@ func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGro
 }
 
 // preprocessServers makes some needed modifications to the servers fetched
-func preprocessServers(servers []defs.Server, excludes []string) []defs.Server {
+func preprocessServers(stack defs.Stack, servers []defs.Server, excludes []string) []defs.Server {
 	// exclude servers from --exclude
 	var ret []defs.Server
 	for _, server := range servers {
-		if contains(excludes, server.ID) {
+		if len(excludes) > 0 && contains(excludes, server.ID) {
+			continue
+		}
+		if server.IP != "" && stack != defs.StackIPv6 {
+			server.Target = server.IP
+		} else if server.IPv6 != "" && stack != defs.StackIPv4 {
+			server.Target = server.IPv6
+		} else {
 			continue
 		}
 		ret = append(ret, server)
