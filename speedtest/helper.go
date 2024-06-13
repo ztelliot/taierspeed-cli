@@ -108,12 +108,65 @@ func coreApiDebug(resp *http.Response) {
 	}
 }
 
-func getServerMatch(c *cli.Context, ispInfo *defs.IPInfoResponse, stack defs.Stack) ([]defs.Server, error) {
+func apiGet[T []defs.Server | []defs.ServerResponse | defs.Version](c *cli.Context, path string, query url.Values) (ret T, err error) {
 	coreApi, err := url.Parse(c.String(defs.OptionAPIBase))
 	if err != nil {
-		return nil, err
+		return
 	}
-	u := coreApi.JoinPath(c.String(defs.OptionAPIVersion)).JoinPath("node/match")
+	u := coreApi.JoinPath(c.String(defs.OptionAPIVersion)).JoinPath(path)
+
+	if query != nil {
+		u.RawQuery = query.Encode()
+	}
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("User-Agent", defs.ApiUA)
+
+	start := time.Now()
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	if log.GetLevel() == log.DebugLevel {
+		coreApiDebug(resp)
+	}
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+
+	log.Debugf("Time taken to get server list: %s", time.Since(start))
+
+	if resp.StatusCode != http.StatusOK {
+		if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+			err = fmt.Errorf("%s: %s", resp.Status, b)
+			return
+		}
+		err = fmt.Errorf("%s", resp.Status)
+		return
+	}
+
+	var res struct {
+		Code int `json:"code"`
+		Data T   `json:"data"`
+	}
+	if err = json.Unmarshal(b, &res); err != nil {
+		return
+	} else if res.Code != 0 {
+		err = fmt.Errorf("API error: %d", res.Code)
+		return
+	}
+
+	return res.Data, nil
+}
+
+func getServerMatch(c *cli.Context, ispInfo *defs.IPInfoResponse, stack defs.Stack) ([]defs.Server, error) {
 	v := url.Values{}
 	if ispInfo != nil && ispInfo.ProvId != 0 {
 		v.Add("province", strconv.Itoa(int(ispInfo.ProvId)))
@@ -127,56 +180,11 @@ func getServerMatch(c *cli.Context, ispInfo *defs.IPInfoResponse, stack defs.Sta
 	if stack != defs.StackAll {
 		v.Add("stack", strconv.Itoa(int(stack)))
 	}
-	u.RawQuery = v.Encode()
 
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", defs.ApiUA)
-
-	start := time.Now()
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if log.GetLevel() == log.DebugLevel {
-		coreApiDebug(resp)
-	}
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Debugf("Time taken to get server list: %s", time.Since(start))
-
-	if resp.StatusCode != http.StatusOK {
-		if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
-			return nil, fmt.Errorf("%s: %s", resp.Status, b)
-		}
-		return nil, fmt.Errorf("%s", resp.Status)
-	}
-
-	var res struct {
-		Code int           `json:"code"`
-		Data []defs.Server `json:"data"`
-	}
-	if err = json.Unmarshal(b, &res); err != nil {
-		return nil, err
-	}
-
-	return res.Data, nil
+	return apiGet[[]defs.Server](c, "node/match", v)
 }
 
 func getServerList(c *cli.Context, servers *[]string, groups *[]string, stack defs.Stack) ([]defs.ServerResponse, error) {
-	coreApi, err := url.Parse(c.String(defs.OptionAPIBase))
-	if err != nil {
-		return nil, err
-	}
-	u := coreApi.JoinPath(c.String(defs.OptionAPIVersion)).JoinPath("node")
 	v := url.Values{}
 	if servers != nil && len(*servers) > 0 {
 		v.Add("server", strings.Join(*servers, ","))
@@ -187,94 +195,12 @@ func getServerList(c *cli.Context, servers *[]string, groups *[]string, stack de
 	if stack != defs.StackAll {
 		v.Add("stack", strconv.Itoa(int(stack)))
 	}
-	u.RawQuery = v.Encode()
 
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", defs.ApiUA)
-
-	start := time.Now()
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if log.GetLevel() == log.DebugLevel {
-		coreApiDebug(resp)
-	}
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Debugf("Time taken to get server list: %s", time.Since(start))
-
-	if resp.StatusCode != http.StatusOK {
-		if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
-			return nil, fmt.Errorf("%s: %s", resp.Status, b)
-		}
-		return nil, fmt.Errorf("%s", resp.Status)
-	}
-
-	var res struct {
-		Code int                   `json:"code"`
-		Data []defs.ServerResponse `json:"data"`
-	}
-	if err = json.Unmarshal(b, &res); err != nil {
-		return nil, err
-	}
-
-	return res.Data, nil
+	return apiGet[[]defs.ServerResponse](c, "node", v)
 }
 
-func getVersion(c *cli.Context) (*defs.Version, error) {
-	coreApi, err := url.Parse(c.String(defs.OptionAPIBase))
-	if err != nil {
-		return nil, err
-	}
-	u := coreApi.JoinPath(c.String(defs.OptionAPIVersion)).JoinPath(fmt.Sprintf("version/latest/%s_%s", runtime.GOOS, runtime.GOARCH))
-
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", defs.ApiUA)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if log.GetLevel() == log.DebugLevel {
-		coreApiDebug(resp)
-	}
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
-			return nil, fmt.Errorf("%s: %s", resp.Status, b)
-		}
-		return nil, fmt.Errorf("%s", resp.Status)
-	}
-
-	var res struct {
-		Code int          `json:"code"`
-		Data defs.Version `json:"data"`
-	}
-	if err = json.Unmarshal(b, &res); err != nil {
-		return nil, err
-	}
-
-	return &res.Data, nil
+func getVersion(c *cli.Context) (defs.Version, error) {
+	return apiGet[defs.Version](c, fmt.Sprintf("version/latest/%s_%s", runtime.GOOS, runtime.GOARCH), nil)
 }
 
 func enQueue(s defs.Server) string {
