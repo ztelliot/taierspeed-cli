@@ -193,7 +193,17 @@ func SpeedTest(c *cli.Context) error {
 	if forceIPv6 || c.IsSet(defs.OptionServer) || c.IsSet(defs.OptionServerGroup) {
 		simple = false
 	}
-	if simple || !c.Bool(defs.OptionList) {
+	hasLo := false
+	if c.IsSet(defs.OptionServerGroup) {
+		for _, s := range c.StringSlice(defs.OptionServerGroup) {
+			if strings.Contains(s, "lo") {
+				hasLo = true
+				break
+			}
+		}
+
+	}
+	if simple || !c.Bool(defs.OptionList) || forceIPv6 || (c.IsSet(defs.OptionServerGroup) && hasLo) {
 		ispInfo, _ = defs.GetIPInfo()
 	}
 	if ispInfo == nil || ispInfo.IP == "" || ispInfo.Country != "中国" {
@@ -297,7 +307,7 @@ func SpeedTest(c *cli.Context) error {
 			}
 		}
 
-		if !c.IsSet(defs.OptionServer) && !c.IsSet(defs.OptionServerGroup) && !c.Bool(defs.OptionList) {
+		if !c.IsSet(defs.OptionServer) && !c.IsSet(defs.OptionServerGroup) {
 			if ispInfo != nil && (ispInfo.Province != "" || ispInfo.ISP != "") && ispInfo.Country == "中国" {
 				if provinceMap == nil {
 					provinceMap = initProvinceMap()
@@ -317,6 +327,12 @@ func SpeedTest(c *cli.Context) error {
 			} else {
 				_groups = append(_groups, "44@3")
 			}
+		}
+
+		if c.IsSet(defs.OptionServerGroup) && len(_groups) == 0 {
+			err := errors.New("specified server group(s) not found")
+			log.Errorf("Error when selecting server: %s", err)
+			return err
 		}
 
 		groups, err := getServerList(c, &_servers, &_groups)
