@@ -110,13 +110,17 @@ func SpeedTest(c *cli.Context) error {
 	noICMP := c.Bool(defs.OptionNoICMP)
 
 	var network string
+	var stack defs.Stack
 	switch {
 	case forceIPv4:
 		network = "ip4"
+		stack = defs.StackIPv4
 	case forceIPv6:
 		network = "ip6"
+		stack = defs.StackIPv6
 	default:
 		network = "ip"
+		stack = defs.StackAll
 	}
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -335,7 +339,7 @@ func SpeedTest(c *cli.Context) error {
 			return err
 		}
 
-		groups, err := getServerList(c, &_servers, &_groups)
+		groups, err := getServerList(c, &_servers, &_groups, stack)
 		if err != nil {
 			log.Errorf("Error when fetching server list: %s", err)
 			return err
@@ -392,6 +396,7 @@ func SpeedTest(c *cli.Context) error {
 		if provinceMap == nil {
 			provinceMap = initProvinceMap()
 		}
+		log.Infoln()
 		t := table.NewWriter()
 		t.SetOutputMirror(os.Stdout)
 		t.AppendHeader(table.Row{"ID", "Name", "Prov", "City", "ISP", "v4", "v6"})

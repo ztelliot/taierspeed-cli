@@ -5,6 +5,15 @@ import (
 	"runtime"
 )
 
+type Stack uint8
+
+const (
+	StackAll Stack = iota
+	StackIPv4
+	StackIPv6
+	StackDual
+)
+
 var (
 	BuildDate   string
 	ProgName    string

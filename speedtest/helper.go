@@ -111,7 +111,7 @@ func coreApiDebug(resp *http.Response) {
 	}
 }
 
-func getServerList(c *cli.Context, servers *[]string, groups *[]string) ([]defs.ServerResponse, error) {
+func getServerList(c *cli.Context, servers *[]string, groups *[]string, stack defs.Stack) ([]defs.ServerResponse, error) {
 	coreApi, err := url.Parse(c.String(defs.OptionAPIBase))
 	if err != nil {
 		return nil, err
@@ -123,6 +123,9 @@ func getServerList(c *cli.Context, servers *[]string, groups *[]string) ([]defs.
 	}
 	if groups != nil && len(*groups) > 0 {
 		v.Add("group", strings.Join(*groups, ","))
+	}
+	if stack != defs.StackAll {
+		v.Add("stack", strconv.Itoa(int(stack)))
 	}
 	u.RawQuery = v.Encode()
 
@@ -362,6 +365,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			return nil
 		}
 		if ispInfo != nil {
+			fmt.Println()
 			if ispInfo.City == "" {
 				if ispInfo.Province == "" {
 					fmt.Printf("ISP:\t\t%s%s\n", ispInfo.Country, ispInfo.ISP)
@@ -373,7 +377,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			}
 		}
 		if len(servers) > 1 {
-			fmt.Printf("\n")
+			fmt.Println()
 		}
 	}
 
