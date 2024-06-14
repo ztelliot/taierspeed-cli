@@ -67,21 +67,6 @@ func SpeedTest(c *cli.Context) error {
 		return nil
 	}
 
-	if c.Bool(defs.OptionCheckUpdate) {
-		if latest, err := getVersion(c); err != nil {
-			log.Errorf("Error when fetching latest version: %s", err)
-		} else {
-			if latest.Version != defs.ProgVersion {
-				log.Warnf("Current version: %s", defs.ProgVersion)
-				log.Warnf("New version available: %s", latest.Version)
-				log.Warnf("Download Url: %s", latest.Url)
-			} else {
-				log.Warn("You are using the latest version")
-			}
-		}
-		return nil
-	}
-
 	if c.String(defs.OptionSource) != "" && c.String(defs.OptionInterface) != "" {
 		return fmt.Errorf("incompatible options '%s' and '%s'", defs.OptionSource, defs.OptionInterface)
 	}
@@ -100,6 +85,25 @@ func SpeedTest(c *cli.Context) error {
 	if req := c.Int(defs.OptionConcurrent); req <= 0 {
 		log.Errorf("Concurrent requests cannot be lower than 1: %d is given", req)
 		return errors.New("invalid concurrent requests setting")
+	}
+
+	if req := c.Int(defs.OptionPingCount); req <= 0 {
+		log.Errorf("Ping count cannot be lower than 1: %d is given", req)
+		return errors.New("invalid ping count setting")
+	}
+
+	if req := c.Int(defs.OptionUploadSize); req <= 0 {
+		log.Errorf("Upload size cannot be lower than 1: %d is given", req)
+		return errors.New("invalid upload size setting")
+	}
+
+	if req := c.Int(defs.OptionDuration); req > 150 {
+		log.Errorf("Duration too long: %d seconds", req)
+		return errors.New("invalid duration setting")
+	}
+
+	if c.Bool(defs.OptionNoDownload) || c.Bool(defs.OptionNoUpload) {
+		log.Warnf("The --%s and --%s options are deprecated and will be removed in the future", defs.OptionNoDownload, defs.OptionNoUpload)
 	}
 
 	// HTTP requests timeout
@@ -188,6 +192,21 @@ func SpeedTest(c *cli.Context) error {
 	}
 
 	http.DefaultClient.Transport = transport
+
+	if c.Bool(defs.OptionCheckUpdate) {
+		if latest, err := getVersion(c); err != nil {
+			log.Errorf("Error when fetching latest version: %s", err)
+		} else {
+			if latest.Version != defs.ProgVersion {
+				log.Warnf("Current version: %s", defs.ProgVersion)
+				log.Warnf("New version available: %s", latest.Version)
+				log.Warnf("Download Url: %s", latest.Url)
+			} else {
+				log.Warn("You are using the latest version")
+			}
+		}
+		return nil
+	}
 
 	var ispInfo *defs.IPInfoResponse
 	var servers []defs.Server
