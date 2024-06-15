@@ -33,7 +33,7 @@ type Server struct {
 	Name        string     `json:"name"`
 	IP          string     `json:"ip"`
 	IPv6        string     `json:"ipv6"`
-	Target      string     `json:"_"`
+	Target      string     `json:"-"`
 	Host        string     `json:"host"`
 	Port        uint16     `json:"port"`
 	Prov        uint8      `json:"province"`
