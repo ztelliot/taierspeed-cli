@@ -153,14 +153,18 @@ func apiGet[T []defs.Server | []defs.ServerResponse | defs.Version](c *cli.Conte
 	}
 
 	var res struct {
-		Code int `json:"code"`
-		Data T   `json:"data"`
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+		Data T      `json:"data"`
 	}
 	if err = json.Unmarshal(b, &res); err != nil {
 		return
 	} else if res.Code != 0 {
 		err = fmt.Errorf("API error: %d", res.Code)
 		return
+	}
+	if res.Msg != "" {
+		log.Warnln(res.Msg)
 	}
 
 	return res.Data, nil
