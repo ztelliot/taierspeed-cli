@@ -2,6 +2,7 @@ package speedtest
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"math"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -275,6 +277,14 @@ func deQueue(s defs.Server, key string) bool {
 	return true
 }
 
+func resolveHost(network, host string) string {
+	r := &net.Resolver{PreferGo: true}
+	if records, err := r.LookupIP(context.Background(), network, host); err == nil && len(records) > 0 {
+		return records[0].String()
+	}
+	return ""
+}
+
 func MatchProvince(prov string, provinceMap *map[uint8]defs.ProvinceInfo) uint8 {
 	for _, p := range *provinceMap {
 		if p.ID == 0 {
@@ -339,6 +349,8 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			name := currentServer.Name
 			if currentServer.Type == defs.Perception {
 				name = fmt.Sprintf("%s - %s", currentServer.Name, defs.ISPMap[currentServer.ISP].Name)
+			} else if currentServer.Type == defs.StaticFile {
+				name = fmt.Sprintf("%s - %s%s", currentServer.Name, currentServer.Province, defs.ISPMap[currentServer.ISP].Name)
 			}
 			fmt.Printf("Server:\t\t%s [%s] (id = %s)\n", name, currentServer.Target, currentServer.ID)
 		}
@@ -405,6 +417,8 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			var bytesWritten uint64
 			if c.Bool(defs.OptionNoUpload) {
 				log.Info("Upload test is disabled")
+			} else if currentServer.Type == defs.StaticFile {
+				log.Info("Upload test is not supported for this server")
 			} else {
 				upload, bw, err := currentServer.Upload(c.Bool(defs.OptionNoPreAllocate), silent, c.Bool(defs.OptionBytes), c.Bool(defs.OptionMebiBytes), c.Int(defs.OptionConcurrent), c.Int(defs.OptionUploadSize), time.Duration(c.Int(defs.OptionDuration))*time.Second, token)
 				if err != nil {

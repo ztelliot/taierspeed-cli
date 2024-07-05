@@ -3,6 +3,7 @@ package defs
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
@@ -49,71 +50,75 @@ func request(url string, obj any) error {
 	return nil
 }
 
-func uPai() (*IPInfoResponse, error) {
-	var upaiyun struct {
-		IP     string         `json:"remote_addr"`
-		Detail IPInfoResponse `json:"remote_addr_location"`
-	}
-
-	if err := request("https://pubstatic.b0.upaiyun.com/?_upnode", &upaiyun); err != nil {
-		return nil, err
-	} else {
-		upaiyun.Detail.IP = upaiyun.IP
-		return &upaiyun.Detail, nil
-	}
-}
-
-func bilibili() (*IPInfoResponse, error) {
-	var bili struct {
-		Data IPInfoResponse `json:"data"`
-	}
-
-	if err := request("https://api.bilibili.com/x/web-interface/zone", &bili); err != nil {
-		return nil, err
-	} else {
-		return &bili.Data, nil
-	}
-}
-
-func bilibiliLive() (*IPInfoResponse, error) {
-	var bili struct {
-		Data IPInfoResponse `json:"data"`
-	}
-
-	if err := request("https://api.live.bilibili.com/ip_service/v1/ip_service/get_ip_addr", &bili); err != nil {
-		return nil, err
-	} else {
-		return &bili.Data, nil
-	}
-}
-
-func ipip() (*IPInfoResponse, error) {
-	var data struct {
-		Data struct {
-			IP       string   `json:"ip"`
-			Location []string `json:"location"`
+func meiTuan(ip string) (*IPInfoResponse, error) {
+	var mt struct {
+		Data map[string]struct {
+			Country  string `json:"nation"`
+			Province string `json:"province"`
+			City     string `json:"city"`
+			ISP      string `json:"isp"`
 		} `json:"data"`
 	}
 
-	if err := request("http://myip6.ipip.net/json", &data); err != nil {
+	if err := request(fmt.Sprintf("https://webapi-pc.meitu.com/common/ip_location?ip=%s", ip), &mt); err != nil {
 		return nil, err
 	} else {
-		var ipInfo IPInfoResponse
-		ipInfo.IP = data.Data.IP
-		ipInfo.Country = data.Data.Location[0]
-		ipInfo.Province = data.Data.Location[1]
-		ipInfo.City = data.Data.Location[2]
-		ipInfo.ISP = data.Data.Location[4]
-		return &ipInfo, nil
+		for k, v := range mt.Data {
+			return &IPInfoResponse{
+				IP:       k,
+				Country:  v.Country,
+				Province: v.Province,
+				City:     v.City,
+				ISP:      v.ISP,
+			}, nil
+		}
+	}
+
+	return nil, errors.New("no data")
+}
+
+func biliBiliLiveNew(ip string) (*IPInfoResponse, error) {
+	var bili struct {
+		Data IPInfoResponse `json:"data"`
+	}
+
+	if err := request(fmt.Sprintf("https://api.live.bilibili.com/client/v1/Ip/getInfoNew?ip=%s", ip), &bili); err != nil {
+		return nil, err
+	} else {
+		return &bili.Data, nil
 	}
 }
 
-func GetIPInfo() (*IPInfoResponse, error) {
+func biliBiliLive(ip string) (*IPInfoResponse, error) {
+	var bili struct {
+		Data IPInfoResponse `json:"data"`
+	}
+
+	if err := request(fmt.Sprintf("https://api.live.bilibili.com/ip_service/v1/ip_service/get_ip_addr?ip=%s", ip), &bili); err != nil {
+		return nil, err
+	} else {
+		return &bili.Data, nil
+	}
+}
+
+func speedtestCN(ip string) (*IPInfoResponse, error) {
+	var st struct {
+		Data IPInfoResponse `json:"data"`
+	}
+
+	if err := request(fmt.Sprintf("https://api-v3-ipv6.speedtest.cn/ip?ip=%s", ip), &st); err != nil {
+		return nil, err
+	} else {
+		return &st.Data, nil
+	}
+}
+
+func GetIPInfo(ip string) (*IPInfoResponse, error) {
 	var ipInfo *IPInfoResponse
 	var err error
 
-	for _, f := range []func() (*IPInfoResponse, error){uPai, ipip, bilibiliLive, bilibili} {
-		if ipInfo, err = f(); err == nil && ipInfo.IP != "" {
+	for _, f := range []func(ip string) (*IPInfoResponse, error){meiTuan, biliBiliLiveNew, biliBiliLive, speedtestCN} {
+		if ipInfo, err = f(ip); err == nil && ipInfo.IP != "" {
 			return ipInfo, nil
 		}
 	}

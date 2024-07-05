@@ -227,7 +227,7 @@ func SpeedTest(c *cli.Context) error {
 
 	}
 	if simple || !c.Bool(defs.OptionList) || (c.IsSet(defs.OptionServerGroup) && hasLo) {
-		ispInfo, _ = defs.GetIPInfo()
+		ispInfo, _ = defs.GetIPInfo("")
 		if ispInfo != nil {
 			if ispInfo.Country == "中国" {
 				if ispInfo.Province != "" {
@@ -531,7 +531,29 @@ func preprocessServers(stack defs.Stack, servers []defs.Server, excludes []strin
 			server.Target = server.IP
 		} else if server.IPv6 != "" && stack != defs.StackIPv4 {
 			server.Target = server.IPv6
-		} else {
+		}
+		if server.Type == defs.StaticFile {
+			if server.Target == "" {
+				network := "ip"
+				if stack == defs.StackIPv4 {
+					network = "ip4"
+				} else if stack == defs.StackIPv6 {
+					network = "ip6"
+				}
+				server.Target = resolveHost(network, server.Host)
+			}
+			if server.Target != "" {
+				if info, err := defs.GetIPInfo(server.Target); err == nil && info != nil {
+					if info.ISP != "" {
+						info.ISPId = MatchISP(info.ISP)
+					}
+					server.Province = info.Province
+					server.City = info.City
+					server.ISP = info.ISPId
+				}
+			}
+		}
+		if server.Target == "" {
 			continue
 		}
 		ret = append(ret, server)

@@ -25,6 +25,7 @@ const (
 	GlobalSpeed ServerType = iota
 	Perception
 	WirelessSpeed
+	StaticFile
 )
 
 // Server represents a speed test server
@@ -68,12 +69,14 @@ func (s *Server) DownloadURL() *url.URL {
 		return s.URL().JoinPath(s.DownloadURI)
 	} else {
 		switch s.Type {
+		case GlobalSpeed:
+			return s.URL().JoinPath("/speed/File(1G).dl")
 		case Perception:
 			return s.URL().JoinPath("/speedtest/download")
 		case WirelessSpeed:
 			return s.URL().JoinPath("/GSpeedTestServer/download")
 		default:
-			return s.URL().JoinPath("/speed/File(1G).dl")
+			return s.URL()
 		}
 	}
 }
@@ -83,12 +86,14 @@ func (s *Server) UploadURL() *url.URL {
 		return s.URL().JoinPath(s.UploadURI)
 	} else {
 		switch s.Type {
+		case GlobalSpeed:
+			return s.URL().JoinPath("/speed/doAnalsLoad.do")
 		case Perception:
 			return s.URL().JoinPath("/speedtest/upload")
 		case WirelessSpeed:
 			return s.URL().JoinPath("/GSpeedTestServer/upload")
 		default:
-			return s.URL().JoinPath("/speed/doAnalsLoad.do")
+			return s.URL()
 		}
 	}
 }
@@ -98,12 +103,14 @@ func (s *Server) PingURL() *url.URL {
 		return s.URL().JoinPath(s.PingURI)
 	} else {
 		switch s.Type {
+		case GlobalSpeed:
+			return s.URL().JoinPath("/speed/")
 		case Perception:
 			return s.URL().JoinPath("/speedtest/ping")
 		case WirelessSpeed:
 			return s.URL().JoinPath("/GSpeedTestServer/")
 		default:
-			return s.URL().JoinPath("/speed/")
+			return s.URL()
 		}
 	}
 }
@@ -129,7 +136,7 @@ func (s *Server) IsUp() bool {
 	defer resp.Body.Close()
 
 	// only return online if the ping URL returns nothing and 200
-	return (resp.StatusCode == http.StatusOK) || (resp.StatusCode == http.StatusForbidden)
+	return (resp.StatusCode == http.StatusOK) || (resp.StatusCode == http.StatusForbidden) || (resp.StatusCode == http.StatusNotFound)
 }
 
 // ICMPPingAndJitter pings the server via ICMP echos and calculate the average ping and jitter
