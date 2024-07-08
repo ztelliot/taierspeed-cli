@@ -187,6 +187,11 @@ func main() {
 				Value:  "v1",
 				Hidden: true,
 			},
+			&cli.StringSliceFlag{
+				Name:   defs.OptionAPIHeader,
+				Usage:  "Specify Core API `Header`",
+				Hidden: true,
+			},
 			&cli.BoolFlag{
 				Name:   defs.OptionTLSInsecure,
 				Usage:  "Disable TLS certificate verification",

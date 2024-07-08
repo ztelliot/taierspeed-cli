@@ -224,7 +224,6 @@ func SpeedTest(c *cli.Context) error {
 				break
 			}
 		}
-
 	}
 	if simple || !c.Bool(defs.OptionList) || (c.IsSet(defs.OptionServerGroup) && hasLo) {
 		ispInfo, _ = defs.GetIPInfo("")

@@ -127,6 +127,14 @@ func apiGet[T []defs.Server | []defs.ServerResponse | defs.Version](c *cli.Conte
 	}
 	req.Header.Set("User-Agent", defs.ApiUA)
 
+	if c.IsSet(defs.OptionAPIHeader) {
+		for _, h := range c.StringSlice(defs.OptionAPIHeader) {
+			if kv := strings.SplitN(h, ":", 2); len(kv) == 2 {
+				req.Header.Set(kv[0], kv[1])
+			}
+		}
+	}
+
 	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -350,7 +358,18 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			if currentServer.Type == defs.Perception {
 				name = fmt.Sprintf("%s - %s", currentServer.Name, defs.ISPMap[currentServer.ISP].Name)
 			} else if currentServer.Type == defs.StaticFile {
-				name = fmt.Sprintf("%s - %s%s", currentServer.Name, currentServer.Province, defs.ISPMap[currentServer.ISP].Name)
+				info := ""
+				if currentServer.City != "" {
+					info = currentServer.City
+				} else if currentServer.Province != "" {
+					info = currentServer.Province
+				}
+				if currentServer.ISP != 0 {
+					info += defs.ISPMap[currentServer.ISP].Name
+				}
+				if info != "" {
+					name = fmt.Sprintf("%s - %s", currentServer.Name, info)
+				}
 			}
 			fmt.Printf("Server:\t\t%s [%s] (id = %s)\n", name, currentServer.Target, currentServer.ID)
 		}

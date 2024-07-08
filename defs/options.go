@@ -42,6 +42,7 @@ const (
 	OptionCheckUpdateAlt = "u"
 	OptionAPIBase        = "api-base"
 	OptionAPIVersion     = "api-version"
+	OptionAPIHeader      = "api-header"
 	OptionTLSInsecure    = "tls-insecure"
 	OptionDebug          = "debug"
 )

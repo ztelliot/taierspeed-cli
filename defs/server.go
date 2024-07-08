@@ -60,6 +60,7 @@ func (s *Server) URL() *url.URL {
 	u := url.URL{
 		Scheme: "http",
 		Host:   net.JoinHostPort(s.Target, strconv.Itoa(int(s.Port))),
+		Path:   "/",
 	}
 	return &u
 }
@@ -136,7 +137,7 @@ func (s *Server) IsUp() bool {
 	defer resp.Body.Close()
 
 	// only return online if the ping URL returns nothing and 200
-	return (resp.StatusCode == http.StatusOK) || (resp.StatusCode == http.StatusForbidden) || (resp.StatusCode == http.StatusNotFound)
+	return (resp.StatusCode == http.StatusOK) || (resp.StatusCode == http.StatusForbidden) || (resp.StatusCode == http.StatusNotFound) || (resp.StatusCode == http.StatusBadGateway)
 }
 
 // ICMPPingAndJitter pings the server via ICMP echos and calculate the average ping and jitter
