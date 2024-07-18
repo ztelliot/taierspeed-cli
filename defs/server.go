@@ -37,6 +37,7 @@ type Server struct {
 	Target      string     `json:"-"`
 	Host        string     `json:"host"`
 	Port        uint16     `json:"port"`
+	HTTPS       bool       `json:"https"`
 	Prov        uint8      `json:"province"`
 	Province    string     `json:"-"`
 	City        string     `json:"city"`
@@ -49,7 +50,7 @@ type Server struct {
 }
 
 func (s *Server) GetHost() string {
-	if s.Port != 80 {
+	if s.Port != 80 && s.Port != 443 {
 		return net.JoinHostPort(s.Host, strconv.Itoa(int(s.Port)))
 	} else {
 		return s.Host
@@ -57,8 +58,12 @@ func (s *Server) GetHost() string {
 }
 
 func (s *Server) URL() *url.URL {
+	scheme := "http"
+	if s.HTTPS {
+		scheme = "https"
+	}
 	u := url.URL{
-		Scheme: "http",
+		Scheme: scheme,
 		Host:   net.JoinHostPort(s.Target, strconv.Itoa(int(s.Port))),
 		Path:   "/",
 	}

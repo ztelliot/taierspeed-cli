@@ -1,14 +1,13 @@
-package report
+package defs
 
 import (
-	"github.com/ztelliot/taierspeed-cli/defs"
 	"time"
 )
 
 // JSONReport represents the output data fields in a JSON file
 type JSONReport struct {
-	Client  defs.IPInfoResponse `json:"client"`
-	Results []Result            `json:"results"`
+	Client  IPInfoResponse `json:"client"`
+	Results []Result       `json:"results"`
 }
 
 // Result represents the test's information

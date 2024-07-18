@@ -22,7 +22,6 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/ztelliot/taierspeed-cli/defs"
-	"github.com/ztelliot/taierspeed-cli/report"
 )
 
 //go:embed province.csv
@@ -76,7 +75,7 @@ func SpeedTest(c *cli.Context) error {
 
 	// if --csv-header is given, print the header and exit (same behavior speedtest-cli)
 	if c.Bool(defs.OptionCSVHeader) {
-		var rep []report.Result
+		var rep []defs.Result
 		b, _ := gocsv.MarshalBytes(&rep)
 		os.Stdout.WriteString(string(b))
 		return nil
@@ -526,10 +525,10 @@ func preprocessServers(stack defs.Stack, servers []defs.Server, excludes []strin
 		if len(excludes) > 0 && contains(excludes, server.ID) {
 			continue
 		}
-		if server.IP != "" && stack != defs.StackIPv6 {
-			server.Target = server.IP
-		} else if server.IPv6 != "" && stack != defs.StackIPv4 {
+		if server.IPv6 != "" && stack != defs.StackIPv4 {
 			server.Target = server.IPv6
+		} else if server.IP != "" && stack != defs.StackIPv6 {
+			server.Target = server.IP
 		}
 		if server.Type == defs.StaticFile {
 			if server.Target == "" {

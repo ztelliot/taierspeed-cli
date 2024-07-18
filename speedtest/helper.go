@@ -25,7 +25,6 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/ztelliot/taierspeed-cli/defs"
-	"github.com/ztelliot/taierspeed-cli/report"
 )
 
 func getRandom() string {
@@ -130,7 +129,7 @@ func apiGet[T []defs.Server | []defs.ServerResponse | defs.Version](c *cli.Conte
 	if c.IsSet(defs.OptionAPIHeader) {
 		for _, h := range c.StringSlice(defs.OptionAPIHeader) {
 			if kv := strings.SplitN(h, ":", 2); len(kv) == 2 {
-				req.Header.Set(kv[0], kv[1])
+				req.Header.Set(kv[0], strings.TrimSpace(kv[1]))
 			}
 		}
 	}
@@ -349,7 +348,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 		}
 	}
 
-	var repsOut []report.Result
+	var repsOut []defs.Result
 
 	// fetch current user's IP info
 	for _, currentServer := range servers {
@@ -462,7 +461,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 
 			// check for --csv or --json. the program prioritize the --csv before the --json. this is the same behavior as speedtest-cli
 			if c.Bool(defs.OptionCSV) || c.Bool(defs.OptionJSON) {
-				var rep report.Result
+				var rep defs.Result
 				rep.Timestamp = time.Now()
 
 				rep.Ping = math.Round(p*100) / 100
@@ -500,7 +499,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			os.Stdout.WriteString(buf.String())
 		}
 	} else if c.Bool(defs.OptionJSON) {
-		jr := report.JSONReport{Results: repsOut}
+		jr := defs.JSONReport{Results: repsOut}
 		if ispInfo != nil {
 			jr.Client = *ispInfo
 		}
