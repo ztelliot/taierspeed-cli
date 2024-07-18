@@ -4,9 +4,9 @@ go 1.22
 
 require (
 	github.com/briandowns/spinner v1.23.1
-	github.com/go-ping/ping v1.1.0
 	github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1
 	github.com/jedib0t/go-pretty/v6 v6.5.9
+	github.com/prometheus-community/pro-bing v0.4.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/urfave/cli/v2 v2.27.2
 	golang.org/x/sys v0.22.0

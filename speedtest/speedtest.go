@@ -503,7 +503,7 @@ func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGro
 			// if server is up, get ping
 			ping, _, err := server.ICMPPingAndJitter(1, srcIp, network)
 			if err != nil {
-				log.Debugf("Can't ping server %s (%s), skipping", server.Name, server.Target)
+				log.Debugf("Can't ping server %s (%s), skipping", server.Name, server.ID)
 				wg.Done()
 				return
 			}

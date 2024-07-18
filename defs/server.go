@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/briandowns/spinner"
-	"github.com/go-ping/ping"
+	"github.com/prometheus-community/pro-bing"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -152,7 +152,7 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, f
 		return s.PingAndJitter(count + 2)
 	}
 
-	p := ping.New(s.Target)
+	p := probing.New(s.Target)
 	p.SetPrivileged(true)
 	p.SetNetwork(network)
 	p.Count = count
@@ -188,7 +188,7 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, f
 
 	if len(stats.Rtts) == 0 {
 		s.NoICMP = true
-		log.Debugf("No ICMP pings returned for server %s (%s), trying TCP ping", s.Name, s.Target)
+		log.Debugf("No ICMP pings returned for server %s (%s), trying TCP ping", s.Name, s.ID)
 		return s.PingAndJitter(count + 2)
 	}
 
