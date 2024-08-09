@@ -17,6 +17,7 @@ import (
 	"github.com/briandowns/spinner"
 	"github.com/prometheus-community/pro-bing"
 	log "github.com/sirupsen/logrus"
+	"github.com/syndtr/gocapability/capability"
 )
 
 type ServerType uint8
@@ -153,7 +154,23 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, f
 	}
 
 	p := probing.New(s.Target)
-	p.SetPrivileged(true)
+	if os.Getuid() <= 0 {
+		p.SetPrivileged(true)
+	} else {
+		if caps, err := capability.NewPid2(0); err == nil {
+			if err = caps.Load(); err == nil {
+				if caps.Get(capability.EFFECTIVE, capability.CAP_NET_RAW) {
+					p.SetPrivileged(true)
+				} else {
+					log.Warnf("ICMP ping requires `cap_net_raw` privilege, will use UDP ping")
+				}
+			} else {
+				log.Debugf("Failed to load capabilities: %s", err)
+			}
+		} else {
+			log.Debugf("Failed to load capabilities: %s", err)
+		}
+	}
 	p.SetNetwork(network)
 	p.Count = count
 	p.Timeout = time.Duration(count) * time.Second
