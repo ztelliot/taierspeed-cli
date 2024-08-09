@@ -64,10 +64,15 @@ func main() {
 				Usage:  "Do not perform upload test",
 				Hidden: true,
 			},
-			&cli.BoolFlag{
-				Name: defs.OptionNoICMP,
-				Usage: "Do not use ICMP ping. ICMP doesn't work well under Linux\n" +
-					"\tat this moment, so you might want to disable it\n\t",
+			&cli.StringFlag{
+				Name:    defs.OptionPingType,
+				Aliases: []string{defs.OptionPingTypeAlt},
+				Usage: "Change ping `TYPE`. Can be `icmp`, `udp` or `http`.\n" +
+					"\tFor Linux user, icmp ping needs you run as root or give\n" +
+					"\t`cap_net_raw` capability, unprivileged UDP ping needs you\n" +
+					"\tset `net.ipv4.ping_group_range` parameter cover all groups.\n" +
+					"\tFor Windows user, udp ping is not available\n\t",
+				Value: "icmp",
 			},
 			&cli.IntFlag{
 				Name:    defs.OptionConcurrent,

@@ -14,6 +14,14 @@ const (
 	StackDual
 )
 
+type PingType uint8
+
+const (
+	ICMP PingType = iota
+	UDP
+	HTTP
+)
+
 var (
 	BuildDate   string
 	ProgName    string

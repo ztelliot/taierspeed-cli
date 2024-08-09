@@ -317,7 +317,7 @@ func MatchISP(isp string) uint8 {
 }
 
 // doSpeedTest is where the actual speed test happens
-func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, noICMP bool, ispInfo *defs.IPInfoResponse) error {
+func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent bool, pingType defs.PingType, ispInfo *defs.IPInfoResponse) error {
 	if !silent || c.Bool(defs.OptionSimple) {
 		if serverCount := len(servers); serverCount > 1 {
 			fmt.Printf("Testing against %d servers: [ %s ]\n", serverCount, strings.Join(func() []string {
@@ -383,7 +383,7 @@ func doSpeedTest(c *cli.Context, servers []defs.Server, network string, silent, 
 			}
 
 			// skip ICMP if option given
-			currentServer.NoICMP = noICMP
+			currentServer.PingType = pingType
 
 			p, jitter, err := currentServer.ICMPPingAndJitter(c.Int(defs.OptionPingCount), c.String(defs.OptionSource), network)
 			if err != nil {

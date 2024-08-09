@@ -17,7 +17,6 @@ import (
 	"github.com/briandowns/spinner"
 	"github.com/prometheus-community/pro-bing"
 	log "github.com/sirupsen/logrus"
-	"github.com/syndtr/gocapability/capability"
 )
 
 type ServerType uint8
@@ -47,7 +46,7 @@ type Server struct {
 	UploadURI   string     `json:"upload"`
 	PingURI     string     `json:"ping"`
 	Type        ServerType `json:"type"`
-	NoICMP      bool       `json:"-"`
+	PingType    PingType   `json:"-"`
 }
 
 func (s *Server) GetHost() string {
@@ -148,28 +147,13 @@ func (s *Server) IsUp() bool {
 
 // ICMPPingAndJitter pings the server via ICMP echos and calculate the average ping and jitter
 func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, float64, error) {
-	if s.NoICMP {
-		log.Debugf("Skipping ICMP for server %s, will use HTTP ping", s.Name)
+	if s.PingType == HTTP {
 		return s.PingAndJitter(count + 2)
 	}
 
 	p := probing.New(s.Target)
-	if os.Getuid() <= 0 {
+	if s.PingType == ICMP {
 		p.SetPrivileged(true)
-	} else {
-		if caps, err := capability.NewPid2(0); err == nil {
-			if err = caps.Load(); err == nil {
-				if caps.Get(capability.EFFECTIVE, capability.CAP_NET_RAW) {
-					p.SetPrivileged(true)
-				} else {
-					log.Warnf("ICMP ping requires `cap_net_raw` privilege, will use UDP ping")
-				}
-			} else {
-				log.Debugf("Failed to load capabilities: %s", err)
-			}
-		} else {
-			log.Debugf("Failed to load capabilities: %s", err)
-		}
 	}
 	p.SetNetwork(network)
 	p.Count = count
@@ -204,8 +188,8 @@ func (s *Server) ICMPPingAndJitter(count int, srcIp, network string) (float64, f
 	}
 
 	if len(stats.Rtts) == 0 {
-		s.NoICMP = true
-		log.Debugf("No ICMP pings returned for server %s (%s), trying TCP ping", s.Name, s.ID)
+		s.PingType = HTTP
+		log.Debugf("No ICMP/UDP pings returned for server %s (%s), trying TCP ping", s.Name, s.ID)
 		return s.PingAndJitter(count + 2)
 	}
 

@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/syndtr/gocapability/capability"
 	"math"
 	"math/rand"
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -110,7 +112,33 @@ func SpeedTest(c *cli.Context) error {
 
 	forceIPv4 := c.Bool(defs.OptionIPv4)
 	forceIPv6 := c.Bool(defs.OptionIPv6)
-	noICMP := c.Bool(defs.OptionNoICMP)
+	var pingType defs.PingType
+	switch c.String(defs.OptionPingType) {
+	case "udp":
+		pingType = defs.UDP
+		if runtime.GOOS == "windows" {
+			log.Warn("UDP ping is not supported on Windows, will use ICMP ping")
+			pingType = defs.ICMP
+		}
+	case "http":
+		pingType = defs.HTTP
+	default:
+		pingType = defs.ICMP
+		if runtime.GOOS == "linux" {
+			if os.Getuid() > 0 {
+				if caps, err := capability.NewPid2(0); err != nil {
+					log.Debugf("Failed to load capabilities: %s, will use UDP ping", err)
+					pingType = defs.UDP
+				} else if err = caps.Load(); err != nil {
+					log.Debugf("Failed to load capabilities: %s, will use UDP ping", err)
+					pingType = defs.UDP
+				} else if !caps.Get(capability.EFFECTIVE, capability.CAP_NET_RAW) {
+					log.Warn("ICMP ping requires `cap_net_raw` privilege, will use UDP ping")
+					pingType = defs.UDP
+				}
+			}
+		}
+	}
 
 	var network string
 	var stack defs.Stack
@@ -156,7 +184,10 @@ func SpeedTest(c *cli.Context) error {
 
 		if iface != "" {
 			defaultDialer = newInterfaceDialer(iface)
-			noICMP = true
+			if pingType != defs.HTTP {
+				log.Warnf("ICMP/UDP ping is disabled when using interface binding")
+				pingType = defs.HTTP
+			}
 		} else {
 			defaultDialer = &net.Dialer{
 				Timeout:   30 * time.Second,
@@ -254,7 +285,7 @@ func SpeedTest(c *cli.Context) error {
 				servers = append(servers, serversT...)
 			} else {
 				log.Debugf("Find %d servers", len(serversT))
-				if server, ok := selectServer("", serversT, network, c, noICMP); ok {
+				if server, ok := selectServer("", serversT, network, c, pingType); ok {
 					servers = append(servers, server)
 				}
 			}
@@ -367,7 +398,7 @@ func SpeedTest(c *cli.Context) error {
 					logPre := fmt.Sprintf("[%s%s] ", provinceMap[uint8(province)].Short, defs.ISPMap[uint8(isp)].Name)
 					log.Debugf("%sFind %d servers", logPre, len(serversT))
 					if len(serversT) > 0 {
-						if server, ok := selectServer(logPre, serversT, network, c, noICMP); ok {
+						if server, ok := selectServer(logPre, serversT, network, c, pingType); ok {
 							servers = append(servers, server)
 						}
 					}
@@ -414,7 +445,7 @@ func SpeedTest(c *cli.Context) error {
 		return nil
 	}
 
-	return doSpeedTest(c, servers, network, silent, noICMP, ispInfo)
+	return doSpeedTest(c, servers, network, silent, pingType, ispInfo)
 }
 
 func initProvinceMap() map[uint8]defs.ProvinceInfo {
@@ -427,7 +458,7 @@ func initProvinceMap() map[uint8]defs.ProvinceInfo {
 	return provinceMap
 }
 
-func selectServer(logPre string, servers []defs.Server, network string, c *cli.Context, noICMP bool) (defs.Server, bool) {
+func selectServer(logPre string, servers []defs.Server, network string, c *cli.Context, pingType defs.PingType) (defs.Server, bool) {
 	if len(servers) > 10 {
 		r := rand.New(rand.NewSource(time.Now().Unix()))
 		r.Shuffle(len(servers), func(i int, j int) {
@@ -447,7 +478,7 @@ func selectServer(logPre string, servers []defs.Server, network string, c *cli.C
 
 	// spawn 10 concurrent pingers
 	for i := 0; i < 10; i++ {
-		go pingWorker(jobs, results, &wg, c.String(defs.OptionSource), network, noICMP)
+		go pingWorker(jobs, results, &wg, c.String(defs.OptionSource), network, pingType)
 	}
 
 	// send ping jobs to workers
@@ -490,7 +521,7 @@ Loop:
 	return servers[serverIdx], true
 }
 
-func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGroup, srcIp, network string, noICMP bool) {
+func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGroup, srcIp, network string, pingType defs.PingType) {
 	for {
 		job := <-jobs
 		server := job.Server
@@ -498,7 +529,7 @@ func pingWorker(jobs <-chan PingJob, results chan<- PingResult, wg *sync.WaitGro
 		// check the server is up by accessing the ping URL and checking its returned value == empty and status code == 200
 		if server.IsUp() {
 			// skip ICMP if option given
-			server.NoICMP = noICMP
+			server.PingType = pingType
 
 			// if server is up, get ping
 			ping, _, err := server.ICMPPingAndJitter(1, srcIp, network)
