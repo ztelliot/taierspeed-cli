@@ -183,7 +183,7 @@ func main() {
 			&cli.StringFlag{
 				Name:   defs.OptionAPIBase,
 				Usage:  "Core API `URL`",
-				Value:  "https://speed.qwq.vc/api",
+				Value:  "https://taierspeed-api.pages.dev/api",
 				Hidden: true,
 			},
 			&cli.StringFlag{
